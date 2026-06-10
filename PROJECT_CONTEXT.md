@@ -27,8 +27,9 @@
 > **Ausführungskontext (Einschätzung, nicht hart im Skript erzwungen):** Ausführung auf einem
 > Domain Controller oder einem Management-Host mit installierten RSAT-Modulen, im Kontext eines
 > Kontos mit Domänen-Leserechten. Für einzelne DC-Detailprüfungen sind erhöhte Rechte
-> (Domain-Admin-äquivalent) praktisch erforderlich. *Es gibt aktuell keine `#Requires`-Zeile —
-> Abhängigkeiten werden zur Laufzeit nicht hart geprüft.*
+> (Domain-Admin-äquivalent) praktisch erforderlich. *Das Skript prüft beim Start:
+> `#Requires -Version 5.1` plus Modul-Vorabprüfung (ActiveDirectory = Pflicht/Abbruch;
+> GroupPolicy/DnsServer = Warnung, betroffener Bereich wird deaktiviert).*
 
 ## 3. Architektur / Aufbau
 
@@ -82,7 +83,7 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 > noch nicht entschieden/umgesetzt — vor Umsetzung bewerten.
 
 **Beobachtet (verifizierbar im Code):**
-- Keine `#Requires`-Direktiven → fehlende Module/Rechte fallen erst zur Laufzeit auf.
+- ~~Keine `#Requires`-Direktiven~~ → *erledigt (PR „Fundament"): `#Requires -Version 5.1` + Modul-Vorabprüfung.*
 - Ausgabe via `Out-File -Encoding ascii` + zeilenweisem `Add-Content` (viele Einzel-I/O-Operationen).
 - Keine zentrale Fehlerbehandlung (`try/catch`) erkennbar; Remote-Fehler je DC können den Lauf stören.
 - Remoting durchgängig über `Invoke-Command` (WinRM-Abhängigkeit, keine Session-Wiederverwendung an allen Stellen).
@@ -90,16 +91,30 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 - Auskommentierte Bereiche vorhanden (z. B. `dacls`/`$aclchk`, `ca_templates`).
 
 **Empfehlung (Einschätzung — zu bewerten/iterieren):**
-- `#Requires -Version` und Modul-Vorabprüfung ergänzen (Abhängigkeiten früh & klar melden).
+- ~~`#Requires -Version` und Modul-Vorabprüfung ergänzen~~ → *erledigt (PR „Fundament").*
 - Strukturiertes Fehlerhandling pro Prüfblock (`try/catch`, Fortsetzen statt Abbruch).
 - Optionalen **strukturierten Export** (CSV/JSON/HTML) zusätzlich zum Text-Report prüfen —
-  erleichtert spätere Auswertung im Kontext der geplanten AD-Ablösung.
+  erleichtert spätere Auswertung im Kontext der geplanten AD-Ablösung. HTML-Report im Stil
+  von water.css gewünscht.
 - Performance: I/O bündeln (StringBuilder statt vieler `Add-Content`-Aufrufe) prüfen.
 - Parametrisierung (z. B. Ausgabepfad, Zielbereiche) statt fester Variablen im Kopf erwägen.
-- Pester-Tests für die Formatierungs-/Hilfsfunktionen als Sicherheitsnetz vor größeren Refactorings.
+- ~~Pester-Tests für die Formatierungs-/Hilfsfunktionen~~ → *erledigt (PR „Fundament"):
+  `Tests/Analyse_V4_6.Format.Tests.ps1` (Pester 5, 25 Tests). Ausführen mit
+  `Invoke-Pester -Path .\Tests`; läuft unter PowerShell 5.1 und 7.*
 
-## 7. Aktueller Stand (Changelog dieses Durchlaufs)
+## 7. Aktueller Stand (Changelog)
 
+**PR „Fundament" (Juni 2026):**
+- `#Requires -Version 5.1` am Skriptanfang.
+- Modul-Vorabprüfung vor Anlage der Ausgabedatei: `ActiveDirectory` fehlt → klare Meldung +
+  Abbruch (`exit 1`); `GroupPolicy`/`DnsServer` fehlen → Warnung + betroffener Schalter
+  (`$allgpo` bzw. `$dnschk`) wird auf 0 gesetzt, der Lauf geht weiter.
+- Pester-5-Tests für die 13 Formatierungs-/Layout-Funktionen (`Tests/Analyse_V4_6.Format.Tests.ps1`).
+  Die Tests extrahieren die Funktionen per AST aus der Skriptdatei (das Skript wird dabei nicht
+  ausgeführt) und prüfen das Datei-Layout zeichengenau; zusätzlich statische Prüfungen
+  (parsebar, `#Requires` vorhanden, keine schreibenden AD-Cmdlets).
+
+**Vorarbeit (Bereinigungs-Durchlauf):**
 - Firmen-/Personenbezüge entfernt: `$company` → `"AD-Assessment"`, `$madeby` → `"AD-Assessment Tool"`
   (vormals Firmen- bzw. Personenkürzel).
 - Ausgabeverzeichnis `$verz` von `c:\p-sec` auf **`c:\AD-Assessment`** umgestellt.
