@@ -129,6 +129,31 @@ Describe 'Analyse_V4_6.ps1' {
             $bereichAufrufe | Should -BeNullOrEmpty
         }
 
+        It 'hat einen param-Block mit den erwarteten Parametern' {
+            $parameter = $ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath }
+            foreach ($p in @('Verzeichnis','Breite','KeineKonsole','KeineDatei','Bereiche')) {
+                $parameter | Should -Contain $p
+            }
+        }
+
+        It 'dokumentiert die Parameter in der Comment-Based Help' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Match '\.PARAMETER Verzeichnis'
+            $inhalt | Should -Match '\.PARAMETER Bereiche'
+            $inhalt | Should -Match '\.EXAMPLE'
+        }
+
+        It 'startet, parst Parameter und bricht ohne AD-Modul kontrolliert ab' {
+            if (Get-Module -ListAvailable ActiveDirectory) {
+                Set-ItResult -Skipped -Because 'AD-Modul vorhanden - der Lauf wuerde echte AD-Pruefungen starten'
+                return
+            }
+            $ausgabe = & powershell.exe -NoProfile -Command "& '$skriptPfad' -KeineDatei -Breite 80 -Bereiche @{ unbekannt = 1 }" 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 1
+            $ausgabe | Should -Match "Unbekannter Bereichs-Schalter 'unbekannt'"
+            $ausgabe | Should -Match 'ActiveDirectory'
+        }
+
         It 'buendelt die Datei-Ausgabe (genau eine Add-Content-Stelle: Puffer_leeren)' {
             $addContent = $ast.FindAll({
                 param($a) $a -is [System.Management.Automation.Language.CommandAst]
