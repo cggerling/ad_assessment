@@ -1,3 +1,5 @@
+#Requires -Version 5.1
+
 <#
 .SYNOPSIS
     AD-Analyse / Assessment-Report fuer eine On-Premises Active-Directory-Umgebung.
@@ -119,6 +121,24 @@ $verz = "c:\AD-Assessment"                       # Wo soll die Datei abgelegt we
 $sysverz = "$verz\$system"                       # Verzeichnis fuer die Ausgabedatei               #
 $pathtemp = "$sysverz\$datei"                    # Path und Datei zusammenbauen                    #
 $path = $pathtemp                                # Zum vermeiden von Convertierungsfehler umleiten #
+####################################################################################################
+# Modul-Vorabpruefung: Abhaengigkeiten frueh und klar melden (vor Anlage der Ausgabedatei)         #
+##########################################################################################         #
+if (-not (Get-Module -ListAvailable -Name ActiveDirectory)) {                                      #
+    Write-Host "FEHLER : PowerShell-Modul 'ActiveDirectory' nicht gefunden." -ForegroundColor $F_Fehler
+    Write-Host "         Bitte RSAT-AD-PowerShell installieren. Das Skript wird beendet." -ForegroundColor $F_Fehler
+    exit 1                                       # Ohne AD-Modul ist keine Pruefung moeglich       #
+}                                                                                                  #
+if ($allgpo -ge 1 -and -not (Get-Module -ListAvailable -Name GroupPolicy)) {                       #
+    Write-Host "WARNUNG: PowerShell-Modul 'GroupPolicy' nicht gefunden." -ForegroundColor $F_Fehler
+    Write-Host "         Der GPO-Check wird uebersprungen (allgpo=0)." -ForegroundColor $F_Fehler
+    $allgpo = 0                                  # Bereich deaktivieren statt Laufzeitfehler       #
+}                                                                                                  #
+if ($dnschk -ge 1 -and -not (Get-Module -ListAvailable -Name DnsServer)) {                         #
+    Write-Host "WARNUNG: PowerShell-Modul 'DnsServer' nicht gefunden." -ForegroundColor $F_Fehler
+    Write-Host "         Die DNS-Pruefung wird uebersprungen (dnschk=0)." -ForegroundColor $F_Fehler
+    $dnschk = 0                                  # Bereich deaktivieren statt Laufzeitfehler       #
+}                                                                                                  #
 ####################################################################################################
 # Verzeichnis und Datei fuer die Ausgabe pruefen bzw. anlegen:                                     #
 ##############################################################                                     #
