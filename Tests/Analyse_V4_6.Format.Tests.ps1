@@ -32,7 +32,7 @@ Describe 'Analyse_V4_6.ps1' {
         ### Formatierungs-Funktionen extrahieren und global definieren #############################
         $zielFunktionen = @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                             'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
-                            'neu_tab_max6w_fb','neu_text')
+                            'neu_tab_max6w_fb','neu_text','Pruefbereich')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
         }, $true) | Where-Object { $zielFunktionen -contains $_.Name }
@@ -75,7 +75,7 @@ Describe 'Analyse_V4_6.ps1' {
         Remove-Item -LiteralPath $global:path -Force -ErrorAction SilentlyContinue
         foreach ($n in @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                          'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
-                         'neu_tab_max6w_fb','neu_text','Get-ReportZeilen')) {
+                         'neu_tab_max6w_fb','neu_text','Pruefbereich','Get-ReportZeilen')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
         foreach ($v in @('sb','zeichen','tabzeichen','tabtrenner','leer','type','maintitel',
@@ -106,6 +106,22 @@ Describe 'Analyse_V4_6.ps1' {
             $inhalt | Should -Match 'Get-Module -ListAvailable -Name ActiveDirectory'
             $inhalt | Should -Match 'Get-Module -ListAvailable -Name GroupPolicy'
             $inhalt | Should -Match 'Get-Module -ListAvailable -Name DnsServer'
+        }
+
+        It 'Hauptablauf nutzt Pruefbereich (kein ungeschuetzter Bereich-Aufruf auf Top-Level)' {
+            $bereichAufrufe = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.CommandAst]
+            }, $true) | Where-Object { $_.GetCommandName() -eq 'Bereich' } | Where-Object {
+                $p = $_.Parent ; $inFunktion = $false
+                while ($p) {
+                    if ($p -is [System.Management.Automation.Language.FunctionDefinitionAst]) {
+                        $inFunktion = $true ; break
+                    }
+                    $p = $p.Parent
+                }
+                -not $inFunktion
+            }
+            $bereichAufrufe | Should -BeNullOrEmpty
         }
 
         It 'enthaelt keine schreibenden AD-Cmdlets (Read-only-Konvention)' {
@@ -278,13 +294,42 @@ Describe 'Analyse_V4_6.ps1' {
         }
     }
 
+    Context 'Fehlerbehandlung (Pruefbereich)' {
+
+        It 'fuehrt die Aktion innerhalb des Bereichsrahmens aus' {
+            Pruefbereich 'Testbereich' { Leerzeile }
+            $z = Get-ReportZeilen
+            $z.Count | Should -Be 4
+            $z[0] | Should -BeExactly ('*' * 90)
+            $z[1] | Should -Match '^\*\*\* Testbereich'
+            $z[3] | Should -BeExactly ('*' + (' ' * 88) + '*')
+            ($z -join ' ') | Should -Not -Match 'FEHLER'
+        }
+
+        It 'faengt Fehler ab, vermerkt sie im Report und wirft nicht weiter' {
+            { Pruefbereich 'Testbereich' { throw 'Absichtlicher Testfehler' } } | Should -Not -Throw
+            $zeilen = Get-ReportZeilen
+            $inhalt = $zeilen -join ' '
+            $inhalt | Should -Match 'FEHLER - Bereich nur unvollstaendig geprueft'
+            $inhalt | Should -Match 'Absichtlicher Testfehler'
+            $inhalt | Should -Match 'fortgesetzt'
+            foreach ($zeile in $zeilen) { $zeile.Length | Should -Be 90 }
+        }
+
+        It 'nach einem Fehler laeuft die naechste Ausgabe normal weiter' {
+            Pruefbereich 'Testbereich' { throw 'Absichtlicher Testfehler' }
+            Vollzeile
+            $z = Get-ReportZeilen
+            $z[-1] | Should -BeExactly ('*' * 90)
+        }
+    }
+
     Context 'Header und Bottom' {
 
-        It 'Header: fuenf Zeilen, Eckdaten an den richtigen Positionen' {
-            # Header befuellt $frame nur im Konsolenzweig -> fuer den Dateitest
-            # muss die Konsolenausgabe aktiv sein (Verhalten des Originalskripts).
-            $global:A_Con = 1
-            try { Header } finally { $global:A_Con = 0 }
+        It 'Header: fuenf Zeilen, Eckdaten an den richtigen Positionen (auch ohne Konsole)' {
+            # Seit dem Fehlerbehandlungs-PR ist die Dateiausgabe des Headers
+            # unabhaengig von der Konsolenausgabe ($A_Con bleibt hier 0).
+            Header
             $z = Get-ReportZeilen
             $z.Count | Should -Be 5
             $z[0] | Should -BeExactly ('*' * 90)
@@ -295,6 +340,15 @@ Describe 'Analyse_V4_6.ps1' {
             $z[3] | Should -Match 'TESTSYS'
             $z[3] | Should -Match 'Vers\. 4\.6 Test'
             foreach ($zeile in $z) { $zeile.Length | Should -Be 90 }
+        }
+
+        It 'Header: zu lange Firma wird gekuerzt statt den Rahmen zu sprengen' {
+            $global:firma = 'Vers. 4.6 AD-Assessment'   # 23 Zeichen - der reale Standardwert
+            try { Header } finally { $global:firma = 'Vers. 4.6 Test' }
+            $z = Get-ReportZeilen
+            $z.Count | Should -Be 5
+            foreach ($zeile in $z) { $zeile.Length | Should -Be 90 }
+            $z[3] | Should -Match ([regex]::Escape('Vers. 4.6 AD-As~'))
         }
 
         It 'Bottom: drei Zeilen, Ersteller mittig' {

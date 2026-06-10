@@ -59,8 +59,10 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
    `dacls`, `ca_root`, `ca_sub`, `ca_templates`, `dcdienste`, `dcprog`, `dchot`, `dcroles`,
    `dcfeature`, `dc_ldaps`, `NTLM`, `dc_SMB1`, `Power`, `OF_Bitlocker`, `AD_Controller`.
 
-4. **Hauptablauf (Ende des Skripts):** eine Folge von `if ($schalter -ge 1) { Bereich …; <Funktion> }`-
-   Blöcken, die die Prüf-Funktionen abhängig von den Schaltern aufrufen, abgeschlossen durch `bottom`.
+4. **Hauptablauf (Ende des Skripts):** eine Folge von
+   `if ($schalter -ge 1) { Pruefbereich "<Titel>" { <Funktionen> } }`-Blöcken, abgeschlossen durch
+   `bottom`. `Pruefbereich` kapselt jeden Bereich in `try/catch`: Ein Fehler wird im Report
+   vermerkt und rot auf der Konsole gemeldet, danach läuft der nächste Bereich weiter.
 
 ## 4. Ausgabe
 
@@ -85,14 +87,15 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 **Beobachtet (verifizierbar im Code):**
 - ~~Keine `#Requires`-Direktiven~~ → *erledigt (PR „Fundament"): `#Requires -Version 5.1` + Modul-Vorabprüfung.*
 - Ausgabe via `Out-File -Encoding ascii` + zeilenweisem `Add-Content` (viele Einzel-I/O-Operationen).
-- Keine zentrale Fehlerbehandlung (`try/catch`) erkennbar; Remote-Fehler je DC können den Lauf stören.
+- ~~Keine zentrale Fehlerbehandlung (`try/catch`) erkennbar~~ → *erledigt (PR „Fehlerbehandlung"):
+  `Pruefbereich`-Wrapper pro Bereich; `$DCs`-Ermittlung beim Start abgesichert.*
 - Remoting durchgängig über `Invoke-Command` (WinRM-Abhängigkeit, keine Session-Wiederverwendung an allen Stellen).
 - Funktionsname `2werte` beginnt mit Ziffer (legal, aber unüblich/fehleranfällig beim Aufruf).
 - Auskommentierte Bereiche vorhanden (z. B. `dacls`/`$aclchk`, `ca_templates`).
 
 **Empfehlung (Einschätzung — zu bewerten/iterieren):**
 - ~~`#Requires -Version` und Modul-Vorabprüfung ergänzen~~ → *erledigt (PR „Fundament").*
-- Strukturiertes Fehlerhandling pro Prüfblock (`try/catch`, Fortsetzen statt Abbruch).
+- ~~Strukturiertes Fehlerhandling pro Prüfblock~~ → *erledigt (PR „Fehlerbehandlung").*
 - Optionalen **strukturierten Export** (CSV/JSON/HTML) zusätzlich zum Text-Report prüfen —
   erleichtert spätere Auswertung im Kontext der geplanten AD-Ablösung. HTML-Report im Stil
   von water.css gewünscht.
@@ -103,6 +106,19 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
   `Invoke-Pester -Path .\Tests`; läuft unter PowerShell 5.1 und 7.*
 
 ## 7. Aktueller Stand (Changelog)
+
+**PR „Fehlerbehandlung" (Juni 2026):**
+- Neue Funktion `Pruefbereich ($titel, $aktion)`: kapselt jeden Report-Bereich in `try/catch`.
+  Fehler → Vermerk im Report (`FEHLER - Bereich nur unvollstaendig geprueft` + Meldung +
+  Skriptzeile) und rote Konsolenmeldung; der Lauf wird mit dem nächsten Bereich fortgesetzt.
+- Alle 22 Blöcke des Hauptablaufs auf `Pruefbereich` umgestellt (Layout unverändert,
+  per Test abgesichert).
+- `$DCs`-Ermittlung beim Skriptstart abgesichert: schlägt sie fehl → klare Meldung + Abbruch.
+- Header-Bugfixes: Dateiausgabe des Headers funktioniert jetzt auch bei `$A_Con = 0`
+  (vorher leere Zeilen); `$firma`-Werte ≠ 16 Zeichen sprengen nicht mehr den Rahmen
+  (zu lange Werte werden mit `~` gekürzt).
+- Testsuite auf 30 Tests erweitert (Pruefbereich, Header-Fixes, statischer Check:
+  kein ungeschützter `Bereich`-Aufruf im Hauptablauf).
 
 **PR „Fundament" (Juni 2026):**
 - `#Requires -Version 5.1` am Skriptanfang.

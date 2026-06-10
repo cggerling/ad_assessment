@@ -210,10 +210,10 @@ function Header {                                                               
     if($firma.Length % 2 -ne 0) { $dif_firm = $firma.Length + 1 ; $firm = "$firma$leer" }          #
     else { $dif_firm = $firma.Length ; $firm = $firma }                                            #
     if($firm.Length -gt 16) { $firm = $firm.Substring(0,15) +"~"                                   #
-        $header[3,10] = "$leer$firma$leer" }                                                       #
-    elseif ($firm.Length -eq 16) { $header[3,10] = "$leer$firma$leer" }                            #
+        $header[3,10] = "$leer$firm$leer" }                                                        #
+    elseif ($firm.Length -eq 16) { $header[3,10] = "$leer$firm$leer" }                             #
     else { $dif = 16 - $dif_firm ; $tmp = $leer * $dif                                             #
-        $header[3,10] = "$leer$tmp$firma$leer" }                                                   #
+        $header[3,10] = "$leer$tmp$firm$leer" }                                                    #
     $header[3,11] = $F_Ue_Schrift                                                                  #
     ######### Zentral ##############################################################################
     if($maintitel.Length % 2 -ne 0) { $dif_mi = $maintitel.Length + 1 ; $main = "$maintitel$leer" }#
@@ -224,6 +224,11 @@ function Header {                                                               
     else { $dif = ($leere_mitte - $dif_mi - 2) / 2 ; $tmp = $leer * $dif                           #
         $header[2,6] = "$leer$tmp$main$tmp$leer" }                                                 #            
     $header[2,7] = $F_Ue_Schrift                                                                   #
+    ######### Zeilen fuer die Dateiausgabe zusammensetzen (unabhaengig von der Konsole) ###########
+    for ($z=0;$z -lt 5;$z++) {                                                                     #
+        $frame[$z]= $header[$z,0] + $header[$z,2] + $header[$z,4] + $header[$z,6] + $header[$z,8] `
+        + $header[$z,10] + $header[$z,12]                                                          #
+    }                                                                                              #
     ######### Ausgabe Console ######################################################################
     if ($A_Con -eq 1) {                                                                            #
         for ($z=0;$z -lt 5;$z++) {                                                                 #
@@ -234,8 +239,6 @@ function Header {                                                               
         Write-Host $header[$z,8] -ForegroundColor $header[$z,9] -NoNewline                         #
         Write-Host $header[$z,10] -ForegroundColor $header[$z,11] -NoNewline                       #
         Write-Host $header[$z,12] -ForegroundColor $header[$z,13]                                  #
-        $frame[$z]= $header[$z,0] + $header[$z,2] + $header[$z,4] + $header[$z,6] + $header[$z,8] `
-        + $header[$z,10] + $header[$z,12]                                                          #
         }                                                                                          #
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
@@ -718,11 +721,41 @@ function neu_text ($sub,$uze,[string]$ueb,[string]$text) {
     }
 }
 ####################################################################################################
+# Fehlerbehandlung: Kapselt einen Pruefbereich in try/catch                                        #
+####################################################################################################
+function Pruefbereich ($titel,[scriptblock]$aktion) {
+    ### Legende ####################################################################################
+    # $titel  = Ueberschrift des Bereichs (wird an Bereich durchgereicht)                          #
+    # $aktion = Scriptblock mit den Pruef-Funktionen des Bereichs                                  #
+    # Ein Fehler im Bereich bricht den Lauf nicht ab: Er wird im Report vermerkt, auf der          #
+    # Konsole rot gemeldet, und es geht mit dem naechsten Bereich weiter.                          #
+    ################################################################################################
+    Bereich $titel
+    try { & $aktion }
+    catch {
+        $f_meldung = $_.Exception.Message
+        $f_zeile = $_.InvocationInfo.ScriptLineNumber
+        Leerzeile
+        neu_text 0 '!' "FEHLER - Bereich nur unvollstaendig geprueft" `
+            "Meldung: $f_meldung (Skriptzeile $f_zeile). Der Lauf wird mit dem naechsten Bereich fortgesetzt."
+        Leerzeile
+        if ($A_Con -eq 1) {
+            Write-Host "FEHLER im Bereich '$titel': $f_meldung" -ForegroundColor $F_Fehler
+        }
+    }
+}
+####################################################################################################
 # Funktionen zum Auslesen                                                                          #
 ####################################################################################################
 # Globale Variablen fuer den Bereich "Domain, Mode, Controller, FSMO"
 #####################################################################
-$DCs = (Get-ADForest).Domains | ForEach-Object{Get-ADDomainController -Filter * -Server $_ }
+try { $DCs = (Get-ADForest).Domains | ForEach-Object{Get-ADDomainController -Filter * -Server $_ } }
+catch { $DCs = $null }
+if (-not $DCs) {
+    Write-Host "FEHLER : Domain Controller konnten nicht ermittelt werden." -ForegroundColor $F_Fehler
+    Write-Host "         Besteht eine Verbindung zur Domaene? Das Skript wird beendet." -ForegroundColor $F_Fehler
+    exit 1
+}
 ####################################################################################################
 # Funktionen fuer den Bereich "Domain, Mode, FSMO"                                                 #
 ####################################################################################################
@@ -3192,164 +3225,183 @@ Header $type $maintitel
 ## Bereich Domain, Mode, FSMO                                                                     ##
 ####################################################################################################
 if($domoco -ge 1){
-    bereich "Domain, Mode, FSMO"
-    Leerzeile
-    dom_allgemein
+    Pruefbereich "Domain, Mode, FSMO" {
+        Leerzeile
+        dom_allgemein
+    }
 }
 ####################################################################################################
 ## Bereich "Central Store & Templates"                                                            ##
 ####################################################################################################
 if($censto -ge 1 -or $sectem -ge 1){
-    Bereich "Central Store & Templates"
-    if($censto -ge 1){ centralstore }
-    if($sectem -ge 1){ sec_templates }
+    Pruefbereich "Central Store & Templates" {
+        if($censto -ge 1){ centralstore }
+        if($sectem -ge 1){ sec_templates }
+    }
 }
 ####################################################################################################
 ## Bereich Domain Controller                                                                      ##
 ####################################################################################################
 if ($domdcs -ge 1) {
-    Bereich "Domain Controller"
-    Leerzeile
-    controller
+    Pruefbereich "Domain Controller" {
+        Leerzeile
+        controller
+    }
 }
 ####################################################################################################
 ## Bereich "Logging auf Domain Controller(n)"                                                     ##
 ####################################################################################################
 if($loggin -ge 1){
-    Bereich "Logging auf Domain Controller(n)"
-    Leerzeile
-    Event_dienst
-    Auditcheck
+    Pruefbereich "Logging auf Domain Controller(n)" {
+        Leerzeile
+        Event_dienst
+        Auditcheck
+    }
 }
 ####################################################################################################
 ## Bereich "AD-Trusts - Check"                                                                    ##
 ####################################################################################################
 if($adtchk -ge 1){
-    Bereich "AD-Trusts - Check"
-    Leerzeile
-    trusts
+    Pruefbereich "AD-Trusts - Check" {
+        Leerzeile
+        trusts
+    }
 }
 ####################################################################################################
 ## Bereich "DNS - Check"                                                                          ##
 ####################################################################################################
 if($dnschk -ge 1){
-    Bereich "DNS - Check"
-    Leerzeile
-    aging
+    Pruefbereich "DNS - Check" {
+        Leerzeile
+        aging
+    }
 }
 ####################################################################################################
 ## Bereich "Sysvol Replication & AD-Health"                                                       ##
 ####################################################################################################
 if($SysRep -ge 1){
-    Bereich "Sysvol Replication & AD-Health"
-    Leerzeile
-    dfsr
-    controller_check
+    Pruefbereich "Sysvol Replication & AD-Health" {
+        Leerzeile
+        dfsr
+        controller_check
+    }
 }
 ####################################################################################################
 ## Bereich "Administratoren und Builtin Benutzer"                                                 ##
 ####################################################################################################
 if($admusr -ge 1){
-    Bereich "Administratoren und Builtin Benutzer"
-    Leerzeile
-    Admins
-    if($lokadm -eq 1) { lokale_AdmGru }
-    if($AdmGri -eq 1) { dom_AdmGri }
-    if($buildi -eq 1) { builtin_usr }
-    if($priusr -eq 1) { AdmCount }
+    Pruefbereich "Administratoren und Builtin Benutzer" {
+        Leerzeile
+        Admins
+        if($lokadm -eq 1) { lokale_AdmGru }
+        if($AdmGri -eq 1) { dom_AdmGri }
+        if($buildi -eq 1) { builtin_usr }
+        if($priusr -eq 1) { AdmCount }
+    }
 }
 ####################################################################################################
 ## Bereich "Benutzer und Benutzer Accounts"                                                       ##
 ####################################################################################################
 if ($usrchk -eq 1) {
-    Bereich "Benutzer und Benutzer Accounts"
-    Leerzeile
-    User_chk
-    if($inachk -eq 1) { inaktive_User }
-    if($geschk -eq 1) { gesperrte_User }
-    if($falchk -eq 1) { ou_users }
+    Pruefbereich "Benutzer und Benutzer Accounts" {
+        Leerzeile
+        User_chk
+        if($inachk -eq 1) { inaktive_User }
+        if($geschk -eq 1) { gesperrte_User }
+        if($falchk -eq 1) { ou_users }
+    }
 }
 ####################################################################################################
 ## Bereich "Computerkonten Check"                                                                 ##
 ####################################################################################################
 if ($syschk -eq 1) {
-    Bereich 'Computerkonten Check'
-    Leerzeile
-    sys_konten
+    Pruefbereich 'Computerkonten Check' {
+        Leerzeile
+        sys_konten
+    }
 }
 ####################################################################################################
 ## Bereich "Client Check"                                                                         ##
 ####################################################################################################
 if($cltchk -ge 1){
-    Bereich "Client Check"
-    Leerzeile
-    clt_chk
+    Pruefbereich "Client Check" {
+        Leerzeile
+        clt_chk
+    }
 }
 ####################################################################################################
 ## Bereich "Client Check"                                                                         ##
 ####################################################################################################
 if($srvchk -ge 1){
-    Bereich "Server Check"
-    Leerzeile
-    srv_chk
+    Pruefbereich "Server Check" {
+        Leerzeile
+        srv_chk
+    }
 }
 ####################################################################################################
 ## Bereich "Nicht Windows Systeme"                                                                ##
 ####################################################################################################
 if($no_win -eq 1){
-    Bereich 'Nicht "Windows" Systeme'
-    Leerzeile
-    oth_chk
+    Pruefbereich 'Nicht "Windows" Systeme' {
+        Leerzeile
+        oth_chk
+    }
 }
 ####################################################################################################
 ## Bereich "AD-Gruppen"                                                                           ##
 ####################################################################################################
 if($allgru -ge 1){
-    Bereich "AD-Gruppen"
-    Leerzeile
-    ad_gruppen
+    Pruefbereich "AD-Gruppen" {
+        Leerzeile
+        ad_gruppen
+    }
 }
 ####################################################################################################
 ## Bereich "GPO's"                                                                                ##
 ####################################################################################################
 if($allgpo -ge 1){
-    Bereich "GPO's"
-    Leerzeile
-    GPO_all
-    Leerzeile
+    Pruefbereich "GPO's" {
+        Leerzeile
+        GPO_all
+        Leerzeile
+    }
 }
 ####################################################################################################
 ## Bereich "dDP Password Settings"                                                                ##
 ####################################################################################################
 if($dDPchk -ge 1){
-    Bereich "dDP Password Settings"
-    Leerzeile
-    ddomainpol
-    #spezial_user
+    Pruefbereich "dDP Password Settings" {
+        Leerzeile
+        ddomainpol
+        #spezial_user
+    }
 }
 ####################################################################################################
 ## Bereich "fGPP - fine Grained Password Policies"                                                ##
 ####################################################################################################
 if($fgppch -ge 1){
-    Bereich "fine Grained Password Policies"
-    Leerzeile
-    fGPO
+    Pruefbereich "fine Grained Password Policies" {
+        Leerzeile
+        fGPO
+    }
 }
 ####################################################################################################
 ## Bereich "User vs Password Policies"                                                            ##
 ####################################################################################################
 if($userpw -ge 1){
-    Bereich "User vs Password Policies"
-    Leerzeile
-    spezial_user
+    Pruefbereich "User vs Password Policies" {
+        Leerzeile
+        spezial_user
+    }
 }
 ####################################################################################################
 ## Bereich "Organisation Units"                                                                   ##
 ####################################################################################################
 if($OrgUni -ge 1){
-    Bereich "Organisation Units"
-    Leerzeile
-    OUS
+    Pruefbereich "Organisation Units" {
+        Leerzeile
+        OUS
+    }
 }
 ####################################################################################################
 ## Bereich "DACL, Rechte-Delegierung"                                                             ##
@@ -3364,29 +3416,32 @@ if($OrgUni -ge 1){
 ## Bereich "Managed Service Accounts (MSA/gMSA)"                                                  ##
 ####################################################################################################
 if($manacc -ge 1){
-    Bereich "Managed Service Accounts (MSA/gMSA)"
-    Leerzeile
-    KDSR
-    MSA
-    gMSA
+    Pruefbereich "Managed Service Accounts (MSA/gMSA)" {
+        Leerzeile
+        KDSR
+        MSA
+        gMSA
+    }
 }
 ####################################################################################################
 ## Bereich "Zertifizierungsstelle(n)"                                                             ##
 ####################################################################################################
 if($caschk -ge 1){
-    Bereich "Zertifizierungsstelle(n)"
-    Leerzeile
-    ca_root
-    ca_sub
-    #ca_templates
+    Pruefbereich "Zertifizierungsstelle(n)" {
+        Leerzeile
+        ca_root
+        ca_sub
+        #ca_templates
+    }
 }
 ####################################################################################################
 ## Bereich "Domain Controller"                                                                    ##
 ####################################################################################################
 if ($DomCon -ge 1) {
-    Bereich "Domain Controller"
-    Leerzeile
-    AD_Controller
+    Pruefbereich "Domain Controller" {
+        Leerzeile
+        AD_Controller
+    }
 }
 ####################################################################################################
 ## Bereich Abschluss Script                                                                       ##
