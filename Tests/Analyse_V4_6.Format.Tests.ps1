@@ -32,7 +32,8 @@ Describe 'Analyse_V4_6.ps1' {
         ### Formatierungs-Funktionen extrahieren und global definieren #############################
         $zielFunktionen = @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                             'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
-                            'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren')
+                            'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren',
+                            'Merken','Farbklasse','HTML_Report','JSON_Export')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
         }, $true) | Where-Object { $zielFunktionen -contains $_.Name }
@@ -64,6 +65,10 @@ Describe 'Analyse_V4_6.ps1' {
         $global:A_Dat        = 1                    # Datei-Ausgabe in Temp-Datei
         $global:path         = Join-Path ([IO.Path]::GetTempPath()) 'ad_assessment_format_tests.txt'
         $global:A_Puffer     = New-Object System.Text.StringBuilder   # Ausgabepuffer wie im Skript
+        $global:A_Htm        = 1                    # Ereignis-Erfassung fuer HTML aktiv
+        $global:A_Jsn        = 1                    # Ereignis-Erfassung fuer JSON aktiv
+        $global:R_Daten      = New-Object 'System.Collections.Generic.List[object]'
+        $global:version      = 'Vers. 4.6'
 
         function global:Get-ReportZeilen {
             # Erst den Puffer in die Datei schreiben (gepufferte Ausgabe seit Performance-PR),
@@ -79,12 +84,13 @@ Describe 'Analyse_V4_6.ps1' {
         foreach ($n in @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                          'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
                          'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren',
-                         'Get-ReportZeilen')) {
+                         'Merken','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
         foreach ($v in @('sb','zeichen','tabzeichen','tabtrenner','leer','type','maintitel',
                          'firma','madeby','datum','system','F_Rahmen','F_Ue_Schrift','F_Text',
-                         'F_Fehler','A_Con','A_Dat','path','A_Puffer')) {
+                         'F_Fehler','A_Con','A_Dat','path','A_Puffer','A_Htm','A_Jsn',
+                         'R_Daten','version')) {
             Remove-Variable -Name $v -Scope Global -Force -ErrorAction SilentlyContinue
         }
     }
@@ -93,6 +99,7 @@ Describe 'Analyse_V4_6.ps1' {
         if (Test-Path -LiteralPath $global:path) { Clear-Content -LiteralPath $global:path }
         else { New-Item -ItemType File -Path $global:path | Out-Null }
         [void]$global:A_Puffer.Clear()
+        $global:R_Daten.Clear()
     }
 
     Context 'Skript-Datei (statische Pruefungen)' {
@@ -358,6 +365,80 @@ Describe 'Analyse_V4_6.ps1' {
             Vollzeile
             $z = Get-ReportZeilen
             $z[-1] | Should -BeExactly ('*' * 90)
+        }
+    }
+
+    Context 'Strukturierte Erfassung und Exporte (HTML/JSON)' {
+
+        It '2werte und Bereich erzeugen strukturierte Ereignisse' {
+            Bereich 'Mein Bereich'
+            2werte 'Schluessel:' 'Wert123' $null 'Red'
+            $global:R_Daten.Count | Should -Be 2
+            $global:R_Daten[0].Art | Should -Be 'Bereich'
+            $global:R_Daten[0].Titel | Should -Be 'Mein Bereich'
+            $global:R_Daten[1].Art | Should -Be 'Wert'
+            $global:R_Daten[1].Name | Should -Be 'Schluessel:'
+            $global:R_Daten[1].Wert | Should -Be 'Wert123'
+            $global:R_Daten[1].Farbe | Should -Be 'Red'
+        }
+
+        It 'neu_text erfasst Original-Text mit Umlauten (vor der ASCII-Ersetzung)' {
+            neu_text 0 '-' 'Prüfung' 'Die Lösung ist über kurze Wörter möglich.'
+            $global:R_Daten[0].Ueberschrift | Should -Be 'Prüfung'
+            $global:R_Daten[0].Text | Should -Match 'Lösung'
+        }
+
+        It 'keine Erfassung wenn HTML und JSON deaktiviert sind' {
+            $global:A_Htm = 0 ; $global:A_Jsn = 0
+            try { Bereich 'Test' } finally { $global:A_Htm = 1 ; $global:A_Jsn = 1 }
+            $global:R_Daten.Count | Should -Be 0
+        }
+
+        It 'Farbklasse mappt Konsolenfarben auf Befund-Klassen' {
+            Farbklasse 'Red'        | Should -Be 'err'
+            Farbklasse 'DarkRed'    | Should -Be 'err'
+            Farbklasse 'Green'      | Should -Be 'ok'
+            Farbklasse 'DarkYellow' | Should -Be 'warn'
+            Farbklasse 'White'      | Should -Be ''
+            Farbklasse $null        | Should -Be ''
+        }
+
+        It 'HTML_Report erzeugt eigenstaendigen Report mit Struktur, Status-Klassen und Escaping' {
+            Header
+            Bereich 'Domain, Mode, FSMO'
+            Bereichstitel 'Details'
+            2werte 'Status:' 'kritisch <b>!</b>' $null 'Red'
+            neu_tab_max6w_fb -spa 2 -pos 'r' -sub 'n' -bre 10 -wex 'Hinweis' -we1 'DC01' -we2 'online' -we4 'Green'
+            neu_text 0 '!' 'FEHLER - Bereich nur unvollstaendig geprueft' 'Meldung: Testfehler. Der Lauf wird fortgesetzt.'
+            HTML_Report
+            $htmlPfad = [System.IO.Path]::ChangeExtension($global:path, 'html')
+            Test-Path $htmlPfad | Should -BeTrue
+            $html = Get-Content -LiteralPath $htmlPfad -Raw
+            $html | Should -Match '<meta charset="utf-8">'
+            $html | Should -Match '<style>'                               # CSS eingebettet
+            $html | Should -Match 'prefers-color-scheme'                  # hell/dunkel automatisch
+            $html | Should -Match '<h2>Domain, Mode, FSMO</h2>'
+            $html | Should -Match '<h3>Details</h3>'
+            $html | Should -Match '<td class="err">kritisch &lt;b&gt;!&lt;/b&gt;</td>'   # Escaping!
+            $html | Should -Match '<td class="ok">online</td>'
+            $html | Should -Match 'class="fehler"'
+            $html | Should -Match 'TESTSYS'
+            $html | Should -Not -Match '<b>!</b>'                         # nichts unescaped
+            Remove-Item $htmlPfad -Force
+        }
+
+        It 'JSON_Export schreibt gueltiges JSON mit Metadaten und Ereignissen' {
+            Bereich 'Testbereich'
+            2werte 'Anzahl:' '42'
+            JSON_Export
+            $jsonPfad = [System.IO.Path]::ChangeExtension($global:path, 'json')
+            Test-Path $jsonPfad | Should -BeTrue
+            $daten = Get-Content -LiteralPath $jsonPfad -Raw | ConvertFrom-Json
+            $daten.System | Should -Be 'TESTSYS'
+            $daten.Version | Should -Be 'Vers. 4.6'
+            @($daten.Ereignisse).Count | Should -Be 2
+            @($daten.Ereignisse)[1].Wert | Should -Be '42'
+            Remove-Item $jsonPfad -Force
         }
     }
 
