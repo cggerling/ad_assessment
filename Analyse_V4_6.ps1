@@ -16,6 +16,36 @@
     stellen sowie DC-Detailpruefungen (Dienste, Rollen, Features, LDAPS, NTLM, SMB1,
     BitLocker, ExecutionPolicy).
 
+.PARAMETER Verzeichnis
+    Ausgabeverzeichnis fuer den Report (Standard: c:\AD-Assessment).
+
+.PARAMETER Breite
+    Breite der Report-Ausgabe in Zeichen, 70 bis 90 (Standard: 90).
+
+.PARAMETER KeineKonsole
+    Unterdrueckt die farbige Konsolenausgabe (nur Datei-Ausgabe).
+
+.PARAMETER KeineDatei
+    Unterdrueckt die Datei-Ausgabe (nur Konsolenausgabe).
+
+.PARAMETER Bereiche
+    Hashtable, um einzelne Pruefbereich-Schalter zu ueberschreiben, ohne das Skript zu
+    editieren. Schluessel = Schaltername aus dem Skript-Kopf, Wert = 0/1/2 (Semantik wie
+    im Kopf dokumentiert). Beispiel: -Bereiche @{ dnschk = 0; DomCon = 2 }
+    Unbekannte Schalternamen werden mit Warnung ignoriert.
+
+.EXAMPLE
+    .\Analyse_V4_6.ps1
+    Kompletter Lauf mit den im Skript-Kopf hinterlegten Standardwerten.
+
+.EXAMPLE
+    .\Analyse_V4_6.ps1 -Verzeichnis "D:\Reports" -KeineKonsole
+    Report nach D:\Reports schreiben, ohne Konsolenausgabe.
+
+.EXAMPLE
+    .\Analyse_V4_6.ps1 -Bereiche @{ dnschk = 0; allgpo = 0 }
+    Kompletter Lauf, aber ohne DNS- und GPO-Pruefung.
+
 .OUTPUTS
     Fest formatierter Text-Report unter $verz\<COMPUTERNAME>\<B_Datei>_<Datum>.txt
     (Standard-Ausgabeverzeichnis: c:\AD-Assessment). Optional zusaetzlich Konsolenausgabe.
@@ -30,6 +60,18 @@
     Charakter      : Ausschliesslich lesend (keine schreibenden AD-Operationen).
 #>
 
+####################################################################################################
+# Parameter (optional - ohne Angabe gelten die Standardwerte aus dem Skript-Kopf)                  #
+####################################################################################################
+[CmdletBinding()]
+param (
+    [string]$Verzeichnis,                            # Ausgabeverzeichnis (Standard im Kopf: $verz)
+    [ValidateRange(70,90)]
+    [int]$Breite,                                    # Ausgabebreite (Standard im Kopf: $sb)
+    [switch]$KeineKonsole,                           # Konsolenausgabe unterdruecken ($A_Con = 0)
+    [switch]$KeineDatei,                             # Datei-Ausgabe unterdruecken   ($A_Dat = 0)
+    [hashtable]$Bereiche                             # Schalter-Overrides, z.B. @{ dnschk = 0 }
+)
 ####################################################################################################
 ### AD-Analyse Script                                                                Version 4.6 ###
 ####################################################################################################
@@ -110,6 +152,25 @@ $caschk = 1                                      # CA Check aus/ein             
 # Check der einzelnen Domain Controller #        ###################################################
 $DomCon = 1                                      # DC Check aus/ein     (0=nein,1=Teil,2=komplett) #
 ####################################################################################################
+# Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
+################################################################                                   #
+if ($PSBoundParameters.ContainsKey('Breite')) { $sb = $Breite }                                    #
+if ($KeineKonsole) { $A_Con = 0 }                # Konsolenausgabe per Parameter aus               #
+if ($KeineDatei)   { $A_Dat = 0 }                # Datei-Ausgabe per Parameter aus                 #
+if ($Bereiche) {                                 # Einzelne Schalter per Hashtable ueberschreiben  #
+    $schalterListe = @('domoco','schema','censto','sectem','domdcs','loggin','adtchk','dnschk',    #
+                       'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
+                       'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
+                       'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon')             #
+    foreach ($schalter in $Bereiche.Keys) {                                                        #
+        if ($schalterListe -contains $schalter) {                                                  #
+            Set-Variable -Name $schalter -Value ([int]$Bereiche[$schalter])                        #
+        } else {                                                                                   #
+            Write-Host "WARNUNG: Unbekannter Bereichs-Schalter '$schalter' wird ignoriert." -ForegroundColor $F_Fehler
+        }                                                                                          #
+    }                                                                                              #
+}                                                                                                  #
+####################################################################################################
 # Globale Variablen:                                                                               #
 ##################################################                                                 #
 [string]$system = $ENV:COMPUTERNAME              # Systemnamen auslesen und bereitstellen          #
@@ -118,6 +179,7 @@ $datu = Get-Date -Format "dd-MM-yyyy HH.mm.ss"   # Datum auslesen und bereitstel
 #$datei = "$type"+".txt"                         # Dateinamen zusammenbauen Type ohne Datum-Zeit   #
 $datei = "$B_Datei"+"_"+"$datu.txt"              # Dateinamen zusammenbauen Type mit Datum-Zeit    #
 $verz = "c:\AD-Assessment"                       # Wo soll die Datei abgelegt werden               #
+if ($PSBoundParameters.ContainsKey('Verzeichnis')) { $verz = $Verzeichnis }                        #
 $sysverz = "$verz\$system"                       # Verzeichnis fuer die Ausgabedatei               #
 $pathtemp = "$sysverz\$datei"                    # Path und Datei zusammenbauen                    #
 $path = $pathtemp                                # Zum vermeiden von Convertierungsfehler umleiten #

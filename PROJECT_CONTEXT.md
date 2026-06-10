@@ -36,6 +36,9 @@
 Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 1. **Kopf / Konfiguration (oben im Skript):**
+   - **`param()`-Block** (optional beim Aufruf): `-Verzeichnis`, `-Breite` (70–90),
+     `-KeineKonsole`, `-KeineDatei`, `-Bereiche` (Hashtable mit Schalter-Overrides,
+     z. B. `@{ dnschk = 0 }`). Ohne Parameter gelten die Standardwerte aus dem Kopf.
    - Metadaten: `$version`, `$company`, `$madeby`, `$maintitel`, `$B_Datei`.
    - **Schalter-Variablen** je Prüfbereich (`$domoco`, `$schema`, `$censto`, `$domdcs`,
      `$loggin`, `$adtchk`, `$dnschk`, `$SysRep`, `$admusr`, `$usrchk`, `$syschk`, `$manacc`,
@@ -103,12 +106,24 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
   erleichtert spätere Auswertung im Kontext der geplanten AD-Ablösung. HTML-Report im Stil
   von water.css gewünscht.
 - ~~Performance: I/O bündeln (StringBuilder)~~ → *erledigt (PR „Performance").*
-- Parametrisierung (z. B. Ausgabepfad, Zielbereiche) statt fester Variablen im Kopf erwägen.
+- ~~Parametrisierung (Ausgabepfad, Zielbereiche)~~ → *erledigt (PR „Parametrisierung").*
 - ~~Pester-Tests für die Formatierungs-/Hilfsfunktionen~~ → *erledigt (PR „Fundament"):
   `Tests/Analyse_V4_6.Format.Tests.ps1` (Pester 5, 25 Tests). Ausführen mit
   `Invoke-Pester -Path .\Tests`; läuft unter PowerShell 5.1 und 7.*
 
 ## 7. Aktueller Stand (Changelog)
+
+**PR „Parametrisierung" (Juni 2026):**
+- `[CmdletBinding()] param(...)`-Block: `-Verzeichnis`, `-Breite` (ValidateRange 70–90),
+  `-KeineKonsole`, `-KeineDatei`, `-Bereiche` (Hashtable-Schalter-Overrides mit Whitelist
+  der 31 bekannten Schalter; unbekannte Namen → Warnung, werden ignoriert).
+- Overrides greifen nur bei explizit gebundenen Parametern (`$PSBoundParameters`) —
+  die Kopf-Variablen bleiben die dokumentierten Standardwerte, 0/1/2-Semantik unverändert.
+- Comment-Based Help um `.PARAMETER`- und `.EXAMPLE`-Abschnitte erweitert
+  (`Get-Help .\Analyse_V4_6.ps1 -Detailed` funktioniert).
+- Testsuite auf 37 Tests erweitert (param-Block via AST, Help-Inhalte, Integrationstest:
+  Skriptstart im Subprozess parst Parameter und bricht ohne AD-Modul kontrolliert ab —
+  wird auf Systemen mit AD-Modul automatisch übersprungen).
 
 **PR „Performance" (Juni 2026):**
 - Datei-I/O gebündelt: neue Funktionen `Ausgabe` (sammelt Report-Zeilen in einem
