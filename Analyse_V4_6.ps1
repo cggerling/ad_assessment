@@ -121,6 +121,7 @@ $verz = "c:\AD-Assessment"                       # Wo soll die Datei abgelegt we
 $sysverz = "$verz\$system"                       # Verzeichnis fuer die Ausgabedatei               #
 $pathtemp = "$sysverz\$datei"                    # Path und Datei zusammenbauen                    #
 $path = $pathtemp                                # Zum vermeiden von Convertierungsfehler umleiten #
+$A_Puffer = New-Object System.Text.StringBuilder # Sammel-Puffer fuer die Datei-Ausgabe            #
 ####################################################################################################
 # Modul-Vorabpruefung: Abhaengigkeiten frueh und klar melden (vor Anlage der Ausgabedatei)         #
 ##########################################################################################         #
@@ -147,6 +148,18 @@ if ($A_Dat -eq 1) {                                 # Pruefung ab eine Ausgabe i
         New-Item -Path $sysverz -ItemType Directory # Verzeichnis wird erstellt                    #
     }                                               #                                              #
     Out-File $path -Encoding ascii -Width $SB       # Datei wird erstellt und Parameter gesetzt    #
+}                                                                                                  #
+####################################################################################################
+# Gepufferte Datei-Ausgabe (Performance: ein Schreibvorgang je Bereich statt je Zeile)             #
+####################################################################################################
+function Ausgabe ([string]$zeile) {                                                                #
+    [void]$A_Puffer.AppendLine($zeile)           # Zeile in den Puffer statt direkt in die Datei   #
+}                                                                                                  #
+function Puffer_leeren {                                                                           #
+    if ($A_Dat -eq 1 -and $A_Puffer.Length -gt 0) {                                                #
+        $A_Puffer.ToString() | Add-Content -Path $path -NoNewline                                  #
+        [void]$A_Puffer.Clear()                  # Puffer nach dem Schreiben leeren                #
+    }                                                                                              #
 }                                                                                                  #
 ####################################################################################################
 # Design Funktionen (Header, Vollzeile, Leerzeile, Buttom, Bereichstitel, Subtitel)                #
@@ -243,7 +256,7 @@ function Header {                                                               
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        for ($z=0;$z -lt 5;$z++) { Write-Output $frame[$z] | Add-Content -Path $path }             #
+        for ($z=0;$z -lt 5;$z++) { Ausgabe $frame[$z] }                                            #
     }                                                                                              #
 }                                                                                                  #
 function Bottom {                                                                                  #
@@ -270,9 +283,9 @@ function Bottom {                                                               
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output $zeile1u3 | Add-Content -Path $path                                           #
-        Write-Output "$zeile2a$zeile2b$zeile2c$zeile2d" | Add-Content -Path $path                  #
-        Write-Output $zeile1u3 | Add-Content -Path $path                                           #
+        Ausgabe $zeile1u3                                                                          #
+        Ausgabe "$zeile2a$zeile2b$zeile2c$zeile2d"                                                 #
+        Ausgabe $zeile1u3                                                                          #
     }                                                                                              #
 }                                                                                                  #
 function Vollzeile {                                                                               #
@@ -286,7 +299,7 @@ function Vollzeile {                                                            
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output $zeile | Add-Content -Path $path                                              #
+        Ausgabe $zeile                                                                             #
     }                                                                                              #
 }                                                                                                  #
 function Leerzeile {                                                                               #
@@ -302,7 +315,7 @@ function Leerzeile {                                                            
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output $zeile | Add-Content -Path $path                                              #
+        Ausgabe $zeile                                                                             #
     }                                                                                              #
 }                                                                                                  #
 function Trennzeile ($sub) {                                                                       #
@@ -320,7 +333,7 @@ function Trennzeile ($sub) {                                                    
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output $zeile | Add-Content -Path $path                                              #
+        Ausgabe $zeile                                                                             #
     }                                                                                              #
 }                                                                                                  #                                                                                                #
 function tablinie ($sub) {                                                                         #
@@ -338,7 +351,7 @@ function tablinie ($sub) {                                                      
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output $zeile | Add-Content -Path $path                                              #
+        Ausgabe $zeile                                                                             #
     }                                                                                              #
 }                                                                                                  #
 function Bereich ($Wert1) {                                                                        #
@@ -360,9 +373,9 @@ function Bereich ($Wert1) {                                                     
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output $zeile1u3 | Add-Content -Path $path                                           #
-        Write-Output "$zeile2a$zeile2b$zeile2c" | Add-Content -Path $path                          #
-        Write-Output $zeile1u3 | Add-Content -Path $path                                           #
+        Ausgabe $zeile1u3                                                                          #
+        Ausgabe "$zeile2a$zeile2b$zeile2c"                                                         #
+        Ausgabe $zeile1u3                                                                          #
     }                                                                                              #
 }                                                                                                  #
 function Bereichstitel ($Wert1,$sub) {                                                             #
@@ -387,8 +400,8 @@ function Bereichstitel ($Wert1,$sub) {                                          
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output "$zeile1u2a$zeile1b$zeile1u2c" | Add-Content -Path $path                      #
-        Write-Output "$zeile1u2a$zeile2b$zeile1u2c" | Add-Content -Path $path                      #
+        Ausgabe "$zeile1u2a$zeile1b$zeile1u2c"                                                     #
+        Ausgabe "$zeile1u2a$zeile2b$zeile1u2c"                                                     #
     }                                                                                              #
 }                                                                                                  #
 function Subtitel ($wert,$ein,$uz) {
@@ -413,8 +426,8 @@ function Subtitel ($wert,$ein,$uz) {
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output "$zei1$zei2$zei3$zei4" | Add-Content -Path $path                              #
-        Write-Output "$zei1$zei5$zei3$zei4" | Add-Content -Path $path                              #
+        Ausgabe "$zei1$zei2$zei3$zei4"                                                             #
+        Ausgabe "$zei1$zei5$zei3$zei4"                                                             #
     }                                                                                              #
 }
 ####################################################################################################
@@ -444,7 +457,7 @@ function 2werte ($Wert1,$Wert2,$sub,$farb) {                                    
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output "$zeile_a$zeile_b$zeile_c$zeile_d$zeile_e" | Add-Content -Path $path          #
+        Ausgabe "$zeile_a$zeile_b$zeile_c$zeile_d$zeile_e"                                         #
     }                                                                                              #
 }                                                                                                  #
 function new_2werte ($sub,$tz,$W1b,$W1,$Wf1,$W1p,$W2,$Wf2,$W2p) {                                  #
@@ -484,7 +497,7 @@ function new_2werte ($sub,$tz,$W1b,$W1,$Wf1,$W1p,$W2,$Wf2,$W2p) {               
     }                                                                                              #
     ### Ausgabe in Datei ###########################################################################
     if ($A_Dat -eq 1) {                                                                            #
-        Write-Output "$ze1$ze2$ze3$ze4$ze5" | Add-Content -Path $path                              #
+        Ausgabe "$ze1$ze2$ze3$ze4$ze5"                                                             #
     }                                                                                              #
 }
 ####################################################################################################
@@ -658,7 +671,7 @@ function neu_tab_max6w_fb {                                                     
             $buffer = "$buffer$buff"                                                               #
             }                                                                                      #
         $buff2 = $Sammeln[$zeilen-1].W1 ; $buffer = "$buffer$buff2"                                #
-        Write-Output "$buffer" | Add-Content -Path $path                                           #
+        Ausgabe "$buffer"                                                                          #
     }                                                                                              #
 }                                                                                                  #
 ####################################################################################################
@@ -711,12 +724,12 @@ function neu_text ($sub,$uze,[string]$ueb,[string]$text) {
         if($ueb) {
             $tmp_1 = $anfang + $ueb.PadRight($frei) + $ende
             $tmp_2 = $anfang + $ueb_un.PadRight($frei) + $ende
-            Write-Output "$tmp_1" | Add-Content -Path $path
-            Write-Output "$tmp_2" | Add-Content -Path $path
+            Ausgabe "$tmp_1"
+            Ausgabe "$tmp_2"
         }
         for ($a=0;$a -lt $Sammeln_count;$a++) {
             $tmp_x = $anfang + $Sammeln[$a].PadRight($frei) + $ende
-            Write-Output "$tmp_x" | Add-Content -Path $path
+            Ausgabe "$tmp_x"
         }
     }
 }
@@ -743,6 +756,7 @@ function Pruefbereich ($titel,[scriptblock]$aktion) {
             Write-Host "FEHLER im Bereich '$titel': $f_meldung" -ForegroundColor $F_Fehler
         }
     }
+    finally { Puffer_leeren }                    # Bereich fertig -> Puffer in die Datei schreiben #
 }
 ####################################################################################################
 # Funktionen zum Auslesen                                                                          #
@@ -3221,6 +3235,7 @@ function AD_Controller {
 ####################################################################################################
 Clear-Host
 Header $type $maintitel
+Puffer_leeren
 ####################################################################################################
 ## Bereich Domain, Mode, FSMO                                                                     ##
 ####################################################################################################
@@ -3447,6 +3462,7 @@ if ($DomCon -ge 1) {
 ## Bereich Abschluss Script                                                                       ##
 ####################################################################################################
 bottom
+Puffer_leeren
 ####################################################################################################
 ## Ende                                                                                           ##
 ####################################################################################################
