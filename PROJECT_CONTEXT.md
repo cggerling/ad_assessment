@@ -74,6 +74,12 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 - Datei wird via `Out-File … -Encoding ascii` angelegt; die Report-Zeilen werden in einem
   `StringBuilder`-Puffer gesammelt (`Ausgabe`) und je Bereich in einem Rutsch geschrieben
   (`Puffer_leeren`, aufgerufen im `finally` von `Pruefbereich` sowie nach Header/Bottom).
+- **Zusatz-Ausgaben** (abschaltbar via `$A_Htm`/`$A_Jsn` bzw. `-KeinHTML`/`-KeinJSON`):
+  Die Formatierungsfunktionen erfassen jede Ausgabe zusätzlich als strukturiertes Ereignis
+  (`Merken` → `$R_Daten`). Daraus entstehen am Skriptende ein **HTML-Report** (`.html`,
+  water.css-inspiriertes eingebettetes CSS, offline-fähig, hell/dunkel automatisch,
+  Befund-Farben als CSS-Klassen ok/warn/err) und ein **JSON-Export** (`.json`) mit
+  denselben Basisnamen wie der Text-Report.
 
 ## 5. Konventionen, die erhalten bleiben sollen
 
@@ -102,9 +108,9 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 **Empfehlung (Einschätzung — zu bewerten/iterieren):**
 - ~~`#Requires -Version` und Modul-Vorabprüfung ergänzen~~ → *erledigt (PR „Fundament").*
 - ~~Strukturiertes Fehlerhandling pro Prüfblock~~ → *erledigt (PR „Fehlerbehandlung").*
-- Optionalen **strukturierten Export** (CSV/JSON/HTML) zusätzlich zum Text-Report prüfen —
-  erleichtert spätere Auswertung im Kontext der geplanten AD-Ablösung. HTML-Report im Stil
-  von water.css gewünscht.
+- ~~Optionalen strukturierten Export (JSON/HTML) zusätzlich zum Text-Report~~ → *erledigt
+  (PR „Export"): HTML-Report im water.css-Stil + JSON-Export. CSV bewusst ausgelassen —
+  bei Bedarf aus dem JSON ableitbar.*
 - ~~Performance: I/O bündeln (StringBuilder)~~ → *erledigt (PR „Performance").*
 - ~~Parametrisierung (Ausgabepfad, Zielbereiche)~~ → *erledigt (PR „Parametrisierung").*
 - ~~Pester-Tests für die Formatierungs-/Hilfsfunktionen~~ → *erledigt (PR „Fundament"):
@@ -112,6 +118,22 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
   `Invoke-Pester -Path .\Tests`; läuft unter PowerShell 5.1 und 7.*
 
 ## 7. Aktueller Stand (Changelog)
+
+**PR „Export" (Juni 2026):**
+- Strukturierte Erfassung: Die Formatierungsfunktionen melden jede Ausgabe als Ereignis an
+  `Merken` (Arten: Kopf/Bereich/Titel/Subtitel/Wert/TabZeile/Text) → `$R_Daten`.
+  Erfassung nur aktiv, wenn HTML oder JSON eingeschaltet ist; `neu_text` erfasst den
+  Originaltext **vor** der ASCII-Umlaut-Ersetzung.
+- **HTML-Report** (`HTML_Report`): eigenständige `.html` im water.css-inspirierten Stil
+  (eingebettetes CSS, offline-fähig, hell/dunkel folgt der Systemeinstellung). Konsolen-
+  Befund-Farben → CSS-Klassen (`Farbklasse`: Red→err, Green→ok, Yellow→warn);
+  `FEHLER`-Texte aus `Pruefbereich` werden als rote Hinweis-Box gerendert; alle Inhalte
+  HTML-escaped.
+- **JSON-Export** (`JSON_Export`): `.json` mit Metadaten (System, Datum, Version) und der
+  vollständigen Ereignisliste — Basis für spätere Auswertungen (AD-Ablösung).
+- Neue Schalter `$A_Htm`/`$A_Jsn` (Standard 1) bzw. Parameter `-KeinHTML`/`-KeinJSON`.
+- Testsuite auf 43 Tests erweitert (Ereignis-Erfassung, Farb-Mapping, HTML-Struktur inkl.
+  Escaping, JSON-Gültigkeit).
 
 **PR „Parametrisierung" (Juni 2026):**
 - `[CmdletBinding()] param(...)`-Block: `-Verzeichnis`, `-Breite` (ValidateRange 70–90),

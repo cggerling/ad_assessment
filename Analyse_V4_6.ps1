@@ -34,6 +34,12 @@
     im Kopf dokumentiert). Beispiel: -Bereiche @{ dnschk = 0; DomCon = 2 }
     Unbekannte Schalternamen werden mit Warnung ignoriert.
 
+.PARAMETER KeinHTML
+    Unterdrueckt den zusaetzlichen HTML-Report (Standard: wird erzeugt).
+
+.PARAMETER KeinJSON
+    Unterdrueckt den zusaetzlichen JSON-Export (Standard: wird erzeugt).
+
 .EXAMPLE
     .\Analyse_V4_6.ps1
     Kompletter Lauf mit den im Skript-Kopf hinterlegten Standardwerten.
@@ -49,6 +55,8 @@
 .OUTPUTS
     Fest formatierter Text-Report unter $verz\<COMPUTERNAME>\<B_Datei>_<Datum>.txt
     (Standard-Ausgabeverzeichnis: c:\AD-Assessment). Optional zusaetzlich Konsolenausgabe.
+    Zusaetzlich (abschaltbar): HTML-Report (.html, eigenstaendig/offline-faehig) und
+    strukturierter JSON-Export (.json) mit denselben Basisnamen.
 
 .NOTES
     Version       : 4.6
@@ -70,6 +78,8 @@ param (
     [int]$Breite,                                    # Ausgabebreite (Standard im Kopf: $sb)
     [switch]$KeineKonsole,                           # Konsolenausgabe unterdruecken ($A_Con = 0)
     [switch]$KeineDatei,                             # Datei-Ausgabe unterdruecken   ($A_Dat = 0)
+    [switch]$KeinHTML,                               # HTML-Report unterdruecken     ($A_Htm = 0)
+    [switch]$KeinJSON,                               # JSON-Export unterdruecken     ($A_Jsn = 0)
     [hashtable]$Bereiche                             # Schalter-Overrides, z.B. @{ dnschk = 0 }
 )
 ####################################################################################################
@@ -94,7 +104,9 @@ $F_Ue_Schrift = "Gray"                           # Farbe fuer Ueberschriften    
 $F_Text = "White"                                # Farbe fuer normalen Text                        #
 $F_Fehler = "Red"                                # Farbe fuer Fehlermeldungen                      #
 $A_Dat = 1                                       # Ausgabe auch in Datei? 1=Ja 0=Nein              #
-$A_Con = 1                                       # Ausgabe auch in Datei? 1=Ja 0=Nein              #
+$A_Con = 1                                       # Ausgabe auch in Konsole? 1=Ja 0=Nein            #
+$A_Htm = 1                                       # Zusaetzlich HTML-Report? 1=Ja 0=Nein            #
+$A_Jsn = 1                                       # Zusaetzlich JSON-Export? 1=Ja 0=Nein            #
 ####################################################################################################
 # Moegliche Farben:                                                                                #
 ###################                                                                                #
@@ -157,6 +169,8 @@ $DomCon = 1                                      # DC Check aus/ein     (0=nein,
 if ($PSBoundParameters.ContainsKey('Breite')) { $sb = $Breite }                                    #
 if ($KeineKonsole) { $A_Con = 0 }                # Konsolenausgabe per Parameter aus               #
 if ($KeineDatei)   { $A_Dat = 0 }                # Datei-Ausgabe per Parameter aus                 #
+if ($KeinHTML)     { $A_Htm = 0 }                # HTML-Report per Parameter aus                   #
+if ($KeinJSON)     { $A_Jsn = 0 }                # JSON-Export per Parameter aus                   #
 if ($Bereiche) {                                 # Einzelne Schalter per Hashtable ueberschreiben  #
     $schalterListe = @('domoco','schema','censto','sectem','domdcs','loggin','adtchk','dnschk',    #
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
@@ -184,6 +198,7 @@ $sysverz = "$verz\$system"                       # Verzeichnis fuer die Ausgabed
 $pathtemp = "$sysverz\$datei"                    # Path und Datei zusammenbauen                    #
 $path = $pathtemp                                # Zum vermeiden von Convertierungsfehler umleiten #
 $A_Puffer = New-Object System.Text.StringBuilder # Sammel-Puffer fuer die Datei-Ausgabe            #
+$R_Daten = New-Object 'System.Collections.Generic.List[object]' # Ereignisliste fuer HTML/JSON     #
 ####################################################################################################
 # Modul-Vorabpruefung: Abhaengigkeiten frueh und klar melden (vor Anlage der Ausgabedatei)         #
 ##########################################################################################         #
@@ -224,9 +239,22 @@ function Puffer_leeren {                                                        
     }                                                                                              #
 }                                                                                                  #
 ####################################################################################################
+# Strukturierte Erfassung: Report-Ereignisse fuer HTML-Report und JSON-Export sammeln             #
+####################################################################################################
+function Merken ($art, [hashtable]$daten) {                                                        #
+    # $art = Ereignistyp (Kopf/Bereich/Titel/Subtitel/Wert/TabZeile/Text)                          #
+    # $daten = Inhalt des Ereignisses; wird nur gesammelt wenn HTML oder JSON aktiv ist            #
+    if ($A_Htm -eq 1 -or $A_Jsn -eq 1) {                                                           #
+        $daten['Art'] = $art                                                                       #
+        [void]$R_Daten.Add([pscustomobject]$daten)                                                 #
+    }                                                                                              #
+}                                                                                                  #
+####################################################################################################
 # Design Funktionen (Header, Vollzeile, Leerzeile, Buttom, Bereichstitel, Subtitel)                #
 ####################################################################################################
 function Header {                                                                                  #
+    Merken 'Kopf' @{ Typ = $type; Titel = $maintitel; System = $system; Datum = $datum             #
+                     Firma = $firma }                                                              #
     $header = New-Object 'object[,]' 5,14                                                          #
     $frame = New-Object 'object[]' 5                                                               #
     ######### Mit default Farbe fuellen ############################################################
@@ -420,6 +448,7 @@ function Bereich ($Wert1) {                                                     
     ### Legende ####################################################################################
     # Wert1  = Dieser Wert wird im Bereichsheader mittig plaziert                                  #
     ### Berechnung #################################################################################
+    Merken 'Bereich' @{ Titel = $Wert1 }                                                           #
     for ($a=0;$a -lt $sb;$a++) { $zeile1u3 = "$zeichen$zeile1u3"}                                  #
     $zeile2a = "$zeichen$zeichen$zeichen$leer" ; $zeile2d = "$leer$zeichen$zeichen$zeichen"        #
     $zeile2b = "$wert1" ; $dif = $sb - $zeile2a.Length - $zeile2d.Length -$Wert1.Length            #
@@ -445,6 +474,7 @@ function Bereichstitel ($Wert1,$sub) {                                          
     # Wert1  = Dieser Wert wird als Bereichstitel links plaziert                                   #
     # $sub = Einsatzbereich als Subtabelle? nein(n), ja(s)                                         #
     ### Berechnung #################################################################################
+    Merken 'Titel' @{ Text = $Wert1 }                                                              #
     $zeile1u2d = "$leer$zeichen" ; $zeile1b = $Wert1                                               #
     if ($sub -eq 's') { $zeile1u2a = "$zeichen$leer$leer" } else { $zeile1u2a = "$zeichen$leer" }  #
     $dif1 = $sb - $zeile1u2a.Length - $zeile1b.Length - $zeile1u2d.Length                          #
@@ -472,6 +502,7 @@ function Subtitel ($wert,$ein,$uz) {
     # $ein = wie weitet der Titel eingerückt werden soll                                           #
     # $uz  = Welches Zeichen zum Unterstreichen verwendet werden soll (Std. "*")                   #
     ### Berechnung #################################################################################
+    Merken 'Subtitel' @{ Text = $wert }                                                            #
     if (!($uz)) { $uz = "*" } ; if(!($ein)) { $ein = "0" } ; $ein = " " *$ein                      #
     $zei1 = "* " + "$ein" ; $zei4 = " *" ; $zei2 = $wert ; $zei5 = "$uz" *$wert.Length             #
     $dif = $sb - $zei1.Length - $zei2.Length - $zei4.Length ; $zei3 = " " *$dif                    #
@@ -502,6 +533,7 @@ function 2werte ($Wert1,$Wert2,$sub,$farb) {                                    
     # $sub = Einsatzbereich als Subtabelle? nein(n), ja(s)                                         #
     # $farb = Farbe fuer den zweiten Wert                                                          #
     ### Berechnung #################################################################################
+    Merken 'Wert' @{ Name = $Wert1; Wert = $Wert2; Farbe = $farb }                                 #
     $zeile_e = "$leer$zeichen"                                                                     #
     if ($sub -eq 's') { $zeile_a = "$zeichen$leer$leer" } else { $zeile_a = "$zeichen$leer" }      #
     $zeile_b = "$Wert1"                                                                            #
@@ -534,6 +566,7 @@ function new_2werte ($sub,$tz,$W1b,$W1,$Wf1,$W1p,$W2,$Wf2,$W2p) {               
     # $Wf2 = Farbe des zweiten Wertes                                                              #
     # $W2p = Position des Wertes (r=rechts, l=links)                                               #
     ### Berechnung #################################################################################
+    Merken 'Wert' @{ Name = $W1; Wert = $W2; Farbe = $Wf2 }                                        #
     if ($sub) { $ze1 = "$zeichen$leer$leer" } else { $ze1 = "$zeichen$leer" }                      #
     $ze5 = "$leer$zeichen"                                                                         #
     if ($tz) { $ze3 = "$tz " } else { $ze3 = " " }                                                 #
@@ -579,6 +612,9 @@ function neu_tab_max6w_fb {                                                     
     # Remove-Variable -Name $all_we -Force -ErrorAction Ignore                                     #
     # Remove-Variable -Name $farben -Force -ErrorAction Ignore                                     #
     ################################################################################################
+    $alleWe = @($we1,$we2,$we3,$we4,$we5,$we6,$we7,$we8,$we9,$we10,$we11,$we12)                    #
+    Merken 'TabZeile' @{ Zellen = @($alleWe[0..($spa-1)]); Farben = @($alleWe[$spa..(2*$spa-1)])   #
+                         Extra = $wex }                                                            #
     $trenner = "$leer$tabtrenner$leer"                                                             #
     $zeilen = ($spa*2)+3 ; $ende = "$leer$zeichen"                                                 #
     $Sammeln = @() ; $speicher = @()                                                               #
@@ -746,6 +782,7 @@ function neu_text ($sub,$uze,[string]$ueb,[string]$text) {
     # $ueb = Ueberschrift oder Titel                                                               #
     # $text = Der auszugebende Text                                                                #
     ### Berechnung #################################################################################
+    Merken 'Text' @{ Ueberschrift = $ueb; Text = $text }   # vor der Umlaut-Ersetzung erfasst
     $anfang = "$zeichen " + (" " * $sub) ; $ende = " $zeichen" ; $Sammeln = @()
     $frei = $sb - $anfang.Length - $ende.Length
     $ueb = $ueb -replace 'ü',"ue" -replace 'ä',"ae" -replace 'ö',"oe" `
@@ -819,6 +856,128 @@ function Pruefbereich ($titel,[scriptblock]$aktion) {
         }
     }
     finally { Puffer_leeren }                    # Bereich fertig -> Puffer in die Datei schreiben #
+}
+####################################################################################################
+# Export-Funktionen: HTML-Report (im Stil von water.css) und JSON-Export                           #
+####################################################################################################
+function Farbklasse ($farbe) {
+    # Konsolenfarbe -> CSS-Klasse fuer den HTML-Report (Befund-Status)
+    switch -regex ("$farbe") {
+        '^(dark)?red$'    { 'err'  ; break }
+        '^(dark)?green$'  { 'ok'   ; break }
+        '^(dark)?yellow$' { 'warn' ; break }
+        default           { '' }
+    }
+}
+function HTML_Report {
+    # Erzeugt aus den gesammelten Ereignissen ($R_Daten) einen eigenstaendigen HTML-Report.
+    # Styling: kompaktes, water.css-inspiriertes CSS (eingebettet, offline-faehig,
+    # hell/dunkel folgt automatisch der Systemeinstellung).
+    function Esc ($t) { [System.Net.WebUtility]::HtmlEncode("$t") }
+    $ziel = [System.IO.Path]::ChangeExtension($path, 'html')
+    $zielverz = Split-Path -Parent $ziel
+    if (!(Test-Path $zielverz)) { New-Item -Path $zielverz -ItemType Directory | Out-Null }
+    $css = @'
+:root{--bg:#ffffff;--text:#363636;--muted:#70777f;--border:#dbdbdb;--accent:#0076d1;--zebra:rgba(125,125,125,.07);--ok:#2e7d32;--warn:#a86500;--err:#c62828;--fehler-bg:rgba(198,40,40,.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1f25;--text:#dbdbdb;--muted:#8b939e;--border:#3a3f4b;--accent:#41adff;--zebra:rgba(125,125,125,.10);--ok:#7bc67e;--warn:#e0a458;--err:#ef6461;--fehler-bg:rgba(239,100,97,.12)}}
+*{box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;max-width:960px;margin:0 auto;padding:1.5rem 1rem 3rem;background:var(--bg);color:var(--text);line-height:1.5}
+h1{font-size:1.9rem;margin:.5rem 0 .2rem}
+h2{font-size:1.35rem;margin:2.2rem 0 .6rem;padding-bottom:.25rem;border-bottom:2px solid var(--accent)}
+h3{font-size:1.1rem;margin:1.5rem 0 .4rem}
+h4{font-size:1rem;margin:1.1rem 0 .3rem;color:var(--muted)}
+p{margin:.4rem 0}
+table{border-collapse:collapse;width:100%;margin:.4rem 0 1rem;font-size:.92rem}
+td{border:1px solid var(--border);padding:.3rem .6rem;vertical-align:top;text-align:left}
+tr:nth-child(even){background:var(--zebra)}
+table.kv td:first-child{width:42%;color:var(--muted)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}
+.meta{color:var(--muted);font-size:.9rem}
+.fehler{border-left:4px solid var(--err);background:var(--fehler-bg);padding:.6rem .9rem;margin:.8rem 0}
+footer{margin-top:3rem;border-top:1px solid var(--border);padding-top:.6rem}
+'@
+    $H = New-Object System.Text.StringBuilder
+    $kopf = $R_Daten | Where-Object { $_.Art -eq 'Kopf' } | Select-Object -First 1
+    $titelH = if ($kopf) { $kopf.Titel } else { $maintitel }
+    [void]$H.AppendLine('<!DOCTYPE html>')
+    [void]$H.AppendLine('<html lang="de">')
+    [void]$H.AppendLine('<head>')
+    [void]$H.AppendLine('<meta charset="utf-8">')
+    [void]$H.AppendLine('<meta name="viewport" content="width=device-width, initial-scale=1">')
+    [void]$H.AppendLine("<title>$(Esc $titelH) - $(Esc $system)</title>")
+    [void]$H.AppendLine("<style>$css</style>")
+    [void]$H.AppendLine('</head>')
+    [void]$H.AppendLine('<body>')
+    [void]$H.AppendLine("<header><h1>$(Esc $titelH)</h1>")
+    if ($kopf) {
+        [void]$H.AppendLine("<p class=""meta"">$(Esc $kopf.Typ) &middot; System: $(Esc $kopf.System) &middot; $(Esc $kopf.Datum) &middot; $(Esc $kopf.Firma)</p>")
+    }
+    [void]$H.AppendLine('</header>')
+    $offen = ''                                  # aktuell geoeffnete Tabelle: '' | 'kv' | 'tab'
+    foreach ($e in $R_Daten) {
+        if ($e.Art -ne 'Wert' -and $e.Art -ne 'TabZeile' -and $offen) {
+            [void]$H.AppendLine('</table>') ; $offen = ''
+        }
+        switch ($e.Art) {
+            'Bereich'  { [void]$H.AppendLine("<h2>$(Esc $e.Titel)</h2>") }
+            'Titel'    { [void]$H.AppendLine("<h3>$(Esc $e.Text)</h3>") }
+            'Subtitel' { [void]$H.AppendLine("<h4>$(Esc $e.Text)</h4>") }
+            'Wert'     {
+                if ($offen -ne 'kv') {
+                    if ($offen) { [void]$H.AppendLine('</table>') }
+                    [void]$H.AppendLine('<table class="kv">') ; $offen = 'kv'
+                }
+                $kl = Farbklasse $e.Farbe
+                $td = if ($kl) { "<td class=""$kl"">" } else { '<td>' }
+                [void]$H.AppendLine("<tr><td>$(Esc $e.Name)</td>$td$(Esc $e.Wert)</td></tr>")
+            }
+            'TabZeile' {
+                if ($offen -ne 'tab') {
+                    if ($offen) { [void]$H.AppendLine('</table>') }
+                    [void]$H.AppendLine('<table>') ; $offen = 'tab'
+                }
+                $zellen = ''
+                for ($i = 0; $i -lt $e.Zellen.Count; $i++) {
+                    $kl = Farbklasse $e.Farben[$i]
+                    if ($kl) { $zellen += "<td class=""$kl"">$(Esc $e.Zellen[$i])</td>" }
+                    else     { $zellen += "<td>$(Esc $e.Zellen[$i])</td>" }
+                }
+                if ("$($e.Extra)".Trim()) { $zellen += "<td>$(Esc $e.Extra)</td>" }
+                [void]$H.AppendLine("<tr>$zellen</tr>")
+            }
+            'Text'     {
+                if ("$($e.Ueberschrift)" -match '^FEHLER') {
+                    [void]$H.AppendLine("<div class=""fehler""><strong>$(Esc $e.Ueberschrift)</strong><br>$(Esc $e.Text)</div>")
+                } else {
+                    if ("$($e.Ueberschrift)".Trim()) { [void]$H.AppendLine("<h4>$(Esc $e.Ueberschrift)</h4>") }
+                    [void]$H.AppendLine("<p>$(Esc $e.Text)</p>")
+                }
+            }
+        }
+    }
+    if ($offen) { [void]$H.AppendLine('</table>') }
+    [void]$H.AppendLine("<footer><p class=""meta"">$(Esc $madeby) &middot; $(Esc $firma)</p></footer>")
+    [void]$H.AppendLine('</body>')
+    [void]$H.AppendLine('</html>')
+    [System.IO.File]::WriteAllText($ziel, $H.ToString(), (New-Object System.Text.UTF8Encoding($false)))
+    if ($A_Con -eq 1) { Write-Host "HTML-Report : $ziel" -ForegroundColor $F_Ue_Schrift }
+}
+function JSON_Export {
+    # Schreibt die gesammelten Ereignisse als strukturierte JSON-Datei (fuer Auswertungen,
+    # z.B. im Kontext einer geplanten AD-Abloesung).
+    $ziel = [System.IO.Path]::ChangeExtension($path, 'json')
+    $zielverz = Split-Path -Parent $ziel
+    if (!(Test-Path $zielverz)) { New-Item -Path $zielverz -ItemType Directory | Out-Null }
+    $export = [pscustomobject]@{
+        Skript     = $maintitel
+        Version    = $version
+        System     = $system
+        Datum      = $datum
+        Ereignisse = $R_Daten
+    }
+    $json = $export | ConvertTo-Json -Depth 6
+    [System.IO.File]::WriteAllText($ziel, $json, (New-Object System.Text.UTF8Encoding($false)))
+    if ($A_Con -eq 1) { Write-Host "JSON-Export : $ziel" -ForegroundColor $F_Ue_Schrift }
 }
 ####################################################################################################
 # Funktionen zum Auslesen                                                                          #
@@ -3525,6 +3684,11 @@ if ($DomCon -ge 1) {
 ####################################################################################################
 bottom
 Puffer_leeren
+####################################################################################################
+## Zusatz-Ausgaben: HTML-Report und JSON-Export                                                   ##
+####################################################################################################
+if ($A_Htm -eq 1) { HTML_Report }
+if ($A_Jsn -eq 1) { JSON_Export }
 ####################################################################################################
 ## Ende                                                                                           ##
 ####################################################################################################
