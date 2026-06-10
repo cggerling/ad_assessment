@@ -32,7 +32,7 @@ Describe 'Analyse_V4_6.ps1' {
         ### Formatierungs-Funktionen extrahieren und global definieren #############################
         $zielFunktionen = @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                             'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
-                            'neu_tab_max6w_fb','neu_text','Pruefbereich')
+                            'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
         }, $true) | Where-Object { $zielFunktionen -contains $_.Name }
@@ -63,10 +63,13 @@ Describe 'Analyse_V4_6.ps1' {
         $global:A_Con        = 0                    # keine Konsolenausgabe in den Tests
         $global:A_Dat        = 1                    # Datei-Ausgabe in Temp-Datei
         $global:path         = Join-Path ([IO.Path]::GetTempPath()) 'ad_assessment_format_tests.txt'
+        $global:A_Puffer     = New-Object System.Text.StringBuilder   # Ausgabepuffer wie im Skript
 
         function global:Get-ReportZeilen {
-            # Komma-Operator: verhindert, dass die Pipeline ein 1-Zeilen-Array
+            # Erst den Puffer in die Datei schreiben (gepufferte Ausgabe seit Performance-PR),
+            # dann lesen. Komma-Operator: verhindert, dass die Pipeline ein 1-Zeilen-Array
             # zum einzelnen String entrollt ($z[0] waere sonst ein [char]).
+            Puffer_leeren
             , @(Get-Content -LiteralPath $global:path)
         }
     }
@@ -75,12 +78,13 @@ Describe 'Analyse_V4_6.ps1' {
         Remove-Item -LiteralPath $global:path -Force -ErrorAction SilentlyContinue
         foreach ($n in @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                          'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
-                         'neu_tab_max6w_fb','neu_text','Pruefbereich','Get-ReportZeilen')) {
+                         'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren',
+                         'Get-ReportZeilen')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
         foreach ($v in @('sb','zeichen','tabzeichen','tabtrenner','leer','type','maintitel',
                          'firma','madeby','datum','system','F_Rahmen','F_Ue_Schrift','F_Text',
-                         'F_Fehler','A_Con','A_Dat','path')) {
+                         'F_Fehler','A_Con','A_Dat','path','A_Puffer')) {
             Remove-Variable -Name $v -Scope Global -Force -ErrorAction SilentlyContinue
         }
     }
@@ -88,6 +92,7 @@ Describe 'Analyse_V4_6.ps1' {
     BeforeEach {
         if (Test-Path -LiteralPath $global:path) { Clear-Content -LiteralPath $global:path }
         else { New-Item -ItemType File -Path $global:path | Out-Null }
+        [void]$global:A_Puffer.Clear()
     }
 
     Context 'Skript-Datei (statische Pruefungen)' {
@@ -122,6 +127,13 @@ Describe 'Analyse_V4_6.ps1' {
                 -not $inFunktion
             }
             $bereichAufrufe | Should -BeNullOrEmpty
+        }
+
+        It 'buendelt die Datei-Ausgabe (genau eine Add-Content-Stelle: Puffer_leeren)' {
+            $addContent = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.CommandAst]
+            }, $true) | Where-Object { $_.GetCommandName() -eq 'Add-Content' }
+            $addContent.Count | Should -Be 1
         }
 
         It 'enthaelt keine schreibenden AD-Cmdlets (Read-only-Konvention)' {
@@ -321,6 +333,32 @@ Describe 'Analyse_V4_6.ps1' {
             Vollzeile
             $z = Get-ReportZeilen
             $z[-1] | Should -BeExactly ('*' * 90)
+        }
+    }
+
+    Context 'Gepufferte Datei-Ausgabe (Puffer)' {
+
+        It 'Ausgaben landen erst mit Puffer_leeren in der Datei' {
+            Vollzeile
+            @(Get-Content -LiteralPath $global:path) | Should -BeNullOrEmpty
+            $global:A_Puffer.Length | Should -BeGreaterThan 0
+            Puffer_leeren
+            @(Get-Content -LiteralPath $global:path).Count | Should -Be 1
+        }
+
+        It 'Puffer_leeren leert den Puffer (kein doppelter Inhalt)' {
+            Vollzeile
+            Puffer_leeren
+            Puffer_leeren
+            @(Get-Content -LiteralPath $global:path).Count | Should -Be 1
+            $global:A_Puffer.Length | Should -Be 0
+        }
+
+        It 'Pruefbereich schreibt den Puffer auch im Fehlerfall in die Datei' {
+            Pruefbereich 'Testbereich' { throw 'Absichtlicher Testfehler' }
+            # Direkt lesen, ohne Get-ReportZeilen (das wuerde selbst flushen):
+            $inhalt = @(Get-Content -LiteralPath $global:path) -join ' '
+            $inhalt | Should -Match 'Absichtlicher Testfehler'
         }
     }
 

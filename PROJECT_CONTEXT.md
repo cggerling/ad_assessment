@@ -68,7 +68,9 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 - **Ziel:** `c:\AD-Assessment\<COMPUTERNAME>\<B_Datei>_<dd-MM-yyyy HH.mm.ss>.txt`
 - **Format:** feste Spaltenbreite (`$sb`, 70–90), ASCII-Rahmen, Konsolen-Farbausgabe via `Write-Host`.
-- Datei wird via `Out-File … -Encoding ascii` angelegt und zeilenweise mit `Add-Content` befüllt.
+- Datei wird via `Out-File … -Encoding ascii` angelegt; die Report-Zeilen werden in einem
+  `StringBuilder`-Puffer gesammelt (`Ausgabe`) und je Bereich in einem Rutsch geschrieben
+  (`Puffer_leeren`, aufgerufen im `finally` von `Pruefbereich` sowie nach Header/Bottom).
 
 ## 5. Konventionen, die erhalten bleiben sollen
 
@@ -86,7 +88,8 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 **Beobachtet (verifizierbar im Code):**
 - ~~Keine `#Requires`-Direktiven~~ → *erledigt (PR „Fundament"): `#Requires -Version 5.1` + Modul-Vorabprüfung.*
-- Ausgabe via `Out-File -Encoding ascii` + zeilenweisem `Add-Content` (viele Einzel-I/O-Operationen).
+- ~~Ausgabe via zeilenweisem `Add-Content` (viele Einzel-I/O-Operationen)~~ → *erledigt
+  (PR „Performance"): gepufferte Ausgabe, ein Schreibvorgang je Bereich (~1.000× schneller).*
 - ~~Keine zentrale Fehlerbehandlung (`try/catch`) erkennbar~~ → *erledigt (PR „Fehlerbehandlung"):
   `Pruefbereich`-Wrapper pro Bereich; `$DCs`-Ermittlung beim Start abgesichert.*
 - Remoting durchgängig über `Invoke-Command` (WinRM-Abhängigkeit, keine Session-Wiederverwendung an allen Stellen).
@@ -99,13 +102,23 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 - Optionalen **strukturierten Export** (CSV/JSON/HTML) zusätzlich zum Text-Report prüfen —
   erleichtert spätere Auswertung im Kontext der geplanten AD-Ablösung. HTML-Report im Stil
   von water.css gewünscht.
-- Performance: I/O bündeln (StringBuilder statt vieler `Add-Content`-Aufrufe) prüfen.
+- ~~Performance: I/O bündeln (StringBuilder)~~ → *erledigt (PR „Performance").*
 - Parametrisierung (z. B. Ausgabepfad, Zielbereiche) statt fester Variablen im Kopf erwägen.
 - ~~Pester-Tests für die Formatierungs-/Hilfsfunktionen~~ → *erledigt (PR „Fundament"):
   `Tests/Analyse_V4_6.Format.Tests.ps1` (Pester 5, 25 Tests). Ausführen mit
   `Invoke-Pester -Path .\Tests`; läuft unter PowerShell 5.1 und 7.*
 
 ## 7. Aktueller Stand (Changelog)
+
+**PR „Performance" (Juni 2026):**
+- Datei-I/O gebündelt: neue Funktionen `Ausgabe` (sammelt Report-Zeilen in einem
+  `StringBuilder`) und `Puffer_leeren` (schreibt den Puffer in einem Rutsch in die Datei).
+  Alle 21 `Write-Output … | Add-Content`-Stellen der Formatierungsfunktionen umgestellt.
+- Geschrieben wird je Bereich (`finally` in `Pruefbereich`), nach dem Header und am Skriptende —
+  bei einem Abbruch geht maximal der aktuelle Bereich verloren.
+- Messung: 2.000 Zeilen alt ~88 s, neu ~0,08 s (lokal; Faktor ~1.100).
+- Testsuite auf 34 Tests erweitert (Puffer-Semantik, Flush im Fehlerfall, statischer Check:
+  genau eine `Add-Content`-Stelle im Skript).
 
 **PR „Fehlerbehandlung" (Juni 2026):**
 - Neue Funktion `Pruefbereich ($titel, $aktion)`: kapselt jeden Report-Bereich in `try/catch`.
