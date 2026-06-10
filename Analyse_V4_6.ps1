@@ -59,7 +59,7 @@
     strukturierter JSON-Export (.json) mit denselben Basisnamen.
 
 .NOTES
-    Version       : 4.6
+    Version       : 5.0
     Ausfuehrung    : Auf einem Domain Controller oder einem System mit installierten
                      RSAT-Modulen, im Kontext eines Kontos mit Leserechten in der Domaene
                      (Domain-Admin-aequivalent fuer einzelne Detailpruefungen empfohlen).
@@ -83,11 +83,11 @@ param (
     [hashtable]$Bereiche                             # Schalter-Overrides, z.B. @{ dnschk = 0 }
 )
 ####################################################################################################
-### AD-Analyse Script                                                                Version 4.6 ###
+### AD-Analyse Script                                                                Version 5.0 ###
 ####################################################################################################
 # Globale Definitionen:                                                                            #
 ##################################################                                                 #
-$version = "Vers. 4.6"                           # Script Version                                  #
+$version = "Vers. 5.0"                           # Script Version                                  #
 $company = "AD-Assessment"                       # Firma (neutraler Platzhalter)                   #
 $firma = "$version " + "$company"                # Header Rechts unten                             #
 $sb = 90                                         # Breite der Ausgabe (min.70 - max.90)            #
@@ -242,13 +242,188 @@ function Puffer_leeren {                                                        
 # Strukturierte Erfassung: Report-Ereignisse fuer HTML-Report und JSON-Export sammeln             #
 ####################################################################################################
 function Merken ($art, [hashtable]$daten) {                                                        #
-    # $art = Ereignistyp (Kopf/Bereich/Titel/Subtitel/Wert/TabZeile/Text)                          #
+    # $art = Ereignistyp (Kopf/Bereich/Titel/Subtitel/Wert/TabZeile/Text/Doku)                     #
     # $daten = Inhalt des Ereignisses; wird nur gesammelt wenn HTML oder JSON aktiv ist            #
     if ($A_Htm -eq 1 -or $A_Jsn -eq 1) {                                                           #
         $daten['Art'] = $art                                                                       #
         [void]$R_Daten.Add([pscustomobject]$daten)                                                 #
     }                                                                                              #
 }                                                                                                  #
+####################################################################################################
+# Check-Katalog: fundierte Begruendung je Pruefbereich (Zweck/Beispiel/Empfehlung/Quellen)         #
+# Wird im HTML-Report als einklappbarer Hintergrund-Block und im JSON-Export ausgegeben.           #
+# Schwere: Info | Niedrig | Mittel | Hoch | Kritisch                                               #
+####################################################################################################
+$CheckKatalog = @{
+    'domain_allgemein' = @{
+        Titel = 'Domain, Mode, FSMO'; Schwere = 'Info'
+        Zweck = 'Erfasst Grunddaten von Domaene und Forest: Funktionsebenen, FSMO-Rollenverteilung, AD-Papierkorb und das Alter des krbtgt-Kontos. Diese Werte bilden die Basis fuer alle weiteren Bewertungen.'
+        Beispiel = 'Eine niedrige Funktionsebene (z. B. Windows Server 2008) verhindert moderne Sicherheitsfunktionen wie AD-Papierkorb oder gMSA. Ein sehr altes krbtgt-Passwort erleichtert Golden-Ticket-Angriffe.'
+        Empfehlung = 'Funktionsebenen auf den hoechsten von allen DCs unterstuetzten Stand heben; AD-Papierkorb aktivieren; krbtgt-Passwort regelmaessig (zweifach im Abstand) zuruecksetzen.'
+        Quellen = 'Microsoft Learn - Forest/Domain Functional Levels; Microsoft - krbtgt account maintenance'
+    }
+    'central_store' = @{
+        Titel = 'Central Store & Templates'; Schwere = 'Niedrig'
+        Zweck = 'Prueft, ob ein zentraler Speicher (Central Store) fuer GPO-Vorlagen (ADMX/ADML) im SYSVOL existiert und ob Security-Templates vorhanden sind. Der Central Store haelt die GPO-Vorlagen auf allen DCs einheitlich.'
+        Beispiel = 'Ohne Central Store ziehen Administratoren die ADMX-Dateien vom lokalen Rechner - je nach Patchstand fehlen dann Richtlinien-Einstellungen oder sind uneinheitlich.'
+        Empfehlung = 'Central Store unter \\<Domaene>\SYSVOL\<Domaene>\Policies\PolicyDefinitions anlegen und aktuell halten.'
+        Quellen = 'Microsoft Learn - Create and manage the Central Store for Group Policy ADMX templates'
+    }
+    'domain_controller' = @{
+        Titel = 'Domain Controller (Uebersicht)'; Schwere = 'Info'
+        Zweck = 'Listet die Domaenencontroller des Forest mit Betriebssystem, Standort (Site) und Global-Catalog-Rolle auf. Verschafft den Ueberblick, welche DCs vorhanden sind.'
+        Beispiel = 'Ein DC mit nicht mehr unterstuetztem Betriebssystem (z. B. Windows Server 2012 R2 ohne ESU) erhaelt keine Sicherheitsupdates mehr und ist ein bevorzugtes Angriffsziel.'
+        Empfehlung = 'DCs auf unterstuetzten, aktuell gepatchten Betriebssystemen betreiben; nicht mehr benoetigte DCs sauber heruntergraden.'
+        Quellen = 'Microsoft - Windows Server lifecycle'
+    }
+    'logging' = @{
+        Titel = 'Logging auf Domain Controller(n)'; Schwere = 'Mittel'
+        Zweck = 'Prueft Status des Eventlog-Dienstes und die Audit-Richtlinien der DCs. Ohne aktiviertes Auditing fehlen die Spuren, mit denen Angriffe ueberhaupt erkannt werden koennen.'
+        Beispiel = 'Ist "Audit Kerberos Service Ticket Operations" deaktiviert, bleibt Kerberoasting unsichtbar. Ohne Anmelde-Auditing lassen sich Brute-Force-/Spraying-Angriffe nicht nachweisen.'
+        Empfehlung = 'Advanced Audit Policy gemaess Microsoft-/CIS-Empfehlung konfigurieren (Anmeldungen, Kontenverwaltung, Verzeichnisdienstzugriff); Logs zentral in ein SIEM sammeln.'
+        Quellen = 'Microsoft - Audit Policy Recommendations; CIS Microsoft Windows Server Benchmark'
+    }
+    'trusts' = @{
+        Titel = 'AD-Trusts'; Schwere = 'Mittel'
+        Zweck = 'Wertet Vertrauensstellungen zu anderen Domaenen/Forests aus: Richtung, Transitivitaet und SID-Filtering. Trusts sind potenzielle Angriffspfade ueber Domaenengrenzen hinweg.'
+        Beispiel = 'Fehlt bei einem Forest-Trust das SID-Filtering, kann ein Angreifer aus der vertrauten Domaene per SID-History Rechte in der eigenen Domaene erlangen (cross-forest privilege escalation).'
+        Empfehlung = 'Nicht mehr benoetigte Trusts entfernen; SID-Filtering/Quarantine fuer externe Trusts aktiviert lassen; selektive Authentifizierung pruefen.'
+        Quellen = 'Microsoft - Security considerations for trusts; MITRE ATT&CK T1482 (Domain Trust Discovery)'
+    }
+    'dns' = @{
+        Titel = 'DNS'; Schwere = 'Niedrig'
+        Zweck = 'Prueft DNS-Server-Einstellungen der DCs: Aging/Scavenging (Bereinigung veralteter Eintraege), Forwarder und Zonenkonfiguration. Sauberes DNS ist Voraussetzung fuer Replikation und Anmeldung.'
+        Beispiel = 'Ohne Scavenging sammeln sich veraltete Host-Eintraege an; ein neuer Host kann die IP eines alten Eintrags erhalten und wird dadurch falsch aufgeloest.'
+        Empfehlung = 'Aging/Scavenging mit sinnvollen Intervallen aktivieren; nur vertrauenswuerdige Forwarder konfigurieren; veraltete Zonen bereinigen.'
+        Quellen = 'Microsoft Learn - DNS aging and scavenging'
+    }
+    'sysvol_health' = @{
+        Titel = 'Sysvol Replication & AD-Health'; Schwere = 'Mittel'
+        Zweck = 'Prueft die SYSVOL-Replikation (DFS-R statt des veralteten FRS) und die AD-Replikationsgesundheit. SYSVOL traegt Gruppenrichtlinien und Anmeldeskripte - Replikationsfehler fuehren zu uneinheitlichen Richtlinien.'
+        Beispiel = 'Repliziert SYSVOL noch ueber FRS, ist die Umgebung nicht migriert und auf modernen DCs nicht mehr unterstuetzt; GPO-Aenderungen kommen evtl. nicht auf allen DCs an.'
+        Empfehlung = 'Von FRS auf DFS-R migrieren (falls noch nicht geschehen); Replikationsfehler (repadmin) regelmaessig pruefen und beheben.'
+        Quellen = 'Microsoft - SYSVOL Replication Migration (FRS to DFSR)'
+    }
+    'admins' = @{
+        Titel = 'Administratoren und Builtin Benutzer'; Schwere = 'Hoch'
+        Zweck = 'Wertet hochprivilegierte Gruppen aus (Domain/Enterprise/Schema Admins, Administratoren, Builtin-Konten, Konten mit AdminCount=1). Diese Konten sind das primaere Ziel jedes Angreifers.'
+        Beispiel = 'Ein vergessenes Dienstkonto in "Domain Admins" mit schwachem Passwort genuegt, um die gesamte Domaene zu uebernehmen. Je mehr Mitglieder, desto groesser die Angriffsflaeche.'
+        Empfehlung = 'Mitgliederzahl privilegierter Gruppen minimieren (Tier-0-Modell); Enterprise/Schema Admins im Normalbetrieb leer halten; dedizierte Admin-Konten, kein Tagesgeschaeft mit Admin-Rechten.'
+        Quellen = 'Microsoft - Securing Privileged Access; Microsoft - Protected Accounts and Groups in AD'
+    }
+    'benutzer' = @{
+        Titel = 'Benutzer und Benutzer Accounts'; Schwere = 'Mittel'
+        Zweck = 'Untersucht Benutzerkonten auf inaktive, gesperrte und falsch platzierte Konten (Standard-OU "Users"). Verwaiste Konten sind unbeaufsichtigte Einfallstore.'
+        Beispiel = 'Ein seit zwei Jahren inaktives, aber aktiviertes Konto eines ausgeschiedenen Mitarbeiters laesst sich uebernehmen, ohne dass es auffaellt.'
+        Empfehlung = 'Inaktive Konten deaktivieren und nach Frist loeschen; Konten in passende OUs strukturieren; Joiner-/Mover-/Leaver-Prozess etablieren.'
+        Quellen = 'Microsoft - Active Directory account management best practices'
+    }
+    'computerkonten' = @{
+        Titel = 'Computerkonten'; Schwere = 'Info'
+        Zweck = 'Erfasst die Computerkonten der Domaene. Liefert den Bestand und hilft, verwaiste oder veraltete Maschinenkonten zu erkennen.'
+        Beispiel = 'Ein Computerkonto ohne juengste Anmeldung deutet auf ein ausgemustertes Geraet hin, dessen Konto noch missbraucht werden koennte.'
+        Empfehlung = 'Veraltete Computerkonten regelmaessig identifizieren und entfernen.'
+        Quellen = 'Microsoft - Active Directory maintenance best practices'
+    }
+    'clients' = @{
+        Titel = 'Client Check'; Schwere = 'Niedrig'
+        Zweck = 'Listet Client-Betriebssysteme und prueft, ob sie noch vom Hersteller unterstuetzt werden. Nicht unterstuetzte Systeme erhalten keine Sicherheitsupdates.'
+        Beispiel = 'Ein verbliebenes Windows 7 oder ausgelaufenes Windows 10 ist ueber bekannte, ungepatchte Luecken angreifbar und kann als Sprungbrett dienen.'
+        Empfehlung = 'Nicht unterstuetzte Clients ausmustern oder isolieren; Patch-Management sicherstellen.'
+        Quellen = 'Microsoft - Windows lifecycle fact sheet'
+    }
+    'server' = @{
+        Titel = 'Server Check'; Schwere = 'Niedrig'
+        Zweck = 'Listet Server-Betriebssysteme und deren Support-Status. Wie bei Clients sind nicht unterstuetzte Server ein erhoehtes Risiko.'
+        Beispiel = 'Ein Windows Server 2008 R2 ohne ESU ist dauerhaft verwundbar; faellt er, koennen darauf gespeicherte Anmeldedaten den Angriff ausweiten.'
+        Empfehlung = 'Server auf unterstuetzte Versionen heben; Altsysteme isolieren; Patch-Stand ueberwachen.'
+        Quellen = 'Microsoft - Windows Server lifecycle'
+    }
+    'nicht_windows' = @{
+        Titel = 'Nicht-Windows-Systeme'; Schwere = 'Info'
+        Zweck = 'Erfasst in der Domaene registrierte Nicht-Windows-Systeme. Schafft Transparenz ueber heterogene Geraete (Linux, Appliances), die ebenfalls Konten besitzen.'
+        Beispiel = 'Ein an die Domaene angebundenes Linux-System mit veralteter Konfiguration kann eigene Schwachstellen einbringen.'
+        Empfehlung = 'Nicht-Windows-Beitritte dokumentieren und in das Patch-/Haertungskonzept einbeziehen.'
+        Quellen = 'Allgemeine Haertungs-Empfehlungen (herstellerabhaengig)'
+    }
+    'ad_gruppen' = @{
+        Titel = 'AD-Gruppen'; Schwere = 'Niedrig'
+        Zweck = 'Wertet AD-Gruppen aus (Anzahl, Typ, leere oder verschachtelte Gruppen). Unuebersichtliche Gruppenstrukturen fuehren zu schleichender Rechteanhaeufung.'
+        Beispiel = 'Tief verschachtelte Gruppen verschleiern, wer am Ende welche Rechte hat - so entstehen ungewollte Berechtigungen.'
+        Empfehlung = 'Gruppenmodell aufraeumen (z. B. AGDLP), leere/verwaiste Gruppen entfernen, Verschachtelung begrenzen, regelmaessig rezertifizieren.'
+        Quellen = 'Microsoft - Group scope and nesting best practices'
+    }
+    'gpos' = @{
+        Titel = 'GPOs'; Schwere = 'Mittel'
+        Zweck = 'Erfasst die Gruppenrichtlinienobjekte (GPOs), u. a. nicht verknuepfte oder leere GPOs und die Domaenen-Standardrichtlinien. GPOs steuern zentrale Sicherheitseinstellungen.'
+        Beispiel = 'Eine GPO, deren Bearbeitungsrecht an eine breite Gruppe vergeben ist, erlaubt Angreifern, ueber die GPO Code auf vielen Systemen auszufuehren.'
+        Empfehlung = 'Nicht verknuepfte/leere GPOs entfernen; GPO-Bearbeitungsrechte streng begrenzen; Aenderungen versionieren und dokumentieren.'
+        Quellen = 'Microsoft - Group Policy security best practices; MITRE ATT&CK T1484 (Domain Policy Modification)'
+    }
+    'ddp_password' = @{
+        Titel = 'dDP Password Settings'; Schwere = 'Hoch'
+        Zweck = 'Prueft die Default Domain Password Policy (Mindestlaenge, Komplexitaet, Historie, Sperrschwelle). Diese Richtlinie bestimmt die Grundsicherheit aller Domaenenpasswoerter.'
+        Beispiel = 'Eine Mindestlaenge von 7 Zeichen ohne Sperrschwelle ermoeglicht praktikable Brute-Force- und Password-Spraying-Angriffe.'
+        Empfehlung = 'Mindestens 14 Zeichen, Sperrschwelle setzen, gegen bekannte/kompromittierte Passwoerter pruefen (z. B. Azure AD Password Protection oder gleichwertig).'
+        Quellen = 'Microsoft - Password policy recommendations; NIST SP 800-63B; CIS Benchmark'
+    }
+    'fgpp' = @{
+        Titel = 'Fine Grained Password Policies'; Schwere = 'Mittel'
+        Zweck = 'Wertet Fine-Grained Password Policies (PSOs) aus, mit denen abweichende Passwortrichtlinien fuer einzelne Gruppen/Konten gelten - wichtig vor allem fuer privilegierte und Dienstkonten.'
+        Beispiel = 'Fehlt eine strengere Richtlinie fuer Administratoren oder Dienstkonten, gilt fuer sie nur die oft schwaechere Standardrichtlinie.'
+        Empfehlung = 'Fuer privilegierte Konten und Dienstkonten strengere PSOs definieren (laenger, haeufigerer Wechsel bzw. gMSA).'
+        Quellen = 'Microsoft Learn - Fine-Grained Password Policies'
+    }
+    'user_vs_pw' = @{
+        Titel = 'User vs Password Policies'; Schwere = 'Mittel'
+        Zweck = 'Gleicht Benutzerkonten gegen passwortbezogene Risikomerkmale ab, u. a. "Passwort laeuft nie ab" und "Passwort nicht erforderlich". Solche Konten unterlaufen die Passwortrichtlinie.'
+        Beispiel = 'Ein Konto mit "Password never expires" und schwachem Passwort bleibt dauerhaft angreifbar; "Password not required" erlaubt im Extremfall ein leeres Passwort.'
+        Empfehlung = 'Flags PASSWD_NOTREQD und DONT_EXPIRE_PASSWORD pruefen und entfernen (Ausnahmen nur fuer gMSA/begruendete Faelle).'
+        Quellen = 'Microsoft - userAccountControl flags; Microsoft - account security best practices'
+    }
+    'ous' = @{
+        Titel = 'Organisation Units'; Schwere = 'Info'
+        Zweck = 'Stellt die OU-Struktur dar und prueft optional den Schutz vor versehentlichem Loeschen. Eine saubere OU-Struktur ist Basis fuer gezielte GPO-Verknuepfung und Delegation.'
+        Beispiel = 'Eine flache oder chaotische OU-Struktur erschwert das Tiering und fuehrt dazu, dass GPOs zu breit greifen.'
+        Empfehlung = 'OU-Struktur an Verwaltung/Tiering ausrichten; Schutz vor versehentlichem Loeschen aktivieren; Delegationen dokumentieren.'
+        Quellen = 'Microsoft - Designing the OU structure'
+    }
+    'msa' = @{
+        Titel = 'Managed Service Accounts (MSA/gMSA)'; Schwere = 'Niedrig'
+        Zweck = 'Prueft (group) Managed Service Accounts und den KDS-Root-Key. (g)MSA bieten automatisch verwaltete, sehr lange Passwoerter und sind die sichere Alternative zu klassischen Dienstkonten.'
+        Beispiel = 'Laufen Dienste noch unter klassischen Konten mit fixem Passwort und SPN, sind sie Kerberoasting-faehig - ein gMSA waere dagegen praktisch nicht knackbar.'
+        Empfehlung = 'Dienste auf gMSA umstellen; KDS-Root-Key bereitstellen; klassische Dienstkonten abloesen.'
+        Quellen = 'Microsoft Learn - Group Managed Service Accounts Overview'
+    }
+    'ca' = @{
+        Titel = 'Zertifizierungsstelle(n)'; Schwere = 'Mittel'
+        Zweck = 'Erfasst die Zertifizierungsstellen (Root/Sub-CA) der Umgebung (AD CS). Die PKI ist sicherheitskritisch: Wer Zertifikate ausstellen kann, kann sich als beliebiger Benutzer ausgeben.'
+        Beispiel = 'Eine falsch konfigurierte Vorlage kann es jedem Benutzer erlauben, ein Anmeldezertifikat fuer einen Administrator zu beantragen (ESC1) - die Detailpruefung erfolgt im AD-CS-Sicherheitscheck.'
+        Empfehlung = 'CA-Rollen und Vorlagen regelmaessig auf Fehlkonfigurationen pruefen (ESC1-ESC8); Ausstellungsrechte streng begrenzen.'
+        Quellen = 'SpecterOps - Certified Pre-Owned; Microsoft - AD CS security'
+    }
+    'dc_detail' = @{
+        Titel = 'Domain Controller (Detailpruefung)'; Schwere = 'Mittel'
+        Zweck = 'Fuehrt pro Domaenencontroller Detailpruefungen durch (Dienste, Rollen, Features, LDAPS, NTLM, SMB1, BitLocker, ExecutionPolicy). Der DC ist das Herz der Domaene; seine Haertung ist entscheidend.'
+        Beispiel = 'Ist SMB1 auf einem DC noch aktiv, ist er ueber laengst bekannte Luecken (z. B. EternalBlue) angreifbar; fehlendes LDAPS erlaubt das Mitlesen von Verzeichnisanfragen.'
+        Empfehlung = 'SMB1 entfernen, LDAPS/LDAP-Signing erzwingen, NTLM einschraenken, DCs nach CIS-/Microsoft-Baseline haerten.'
+        Quellen = 'Microsoft Security Baselines; CIS Microsoft Windows Server Benchmark'
+    }
+}
+function Doku ($id) {
+    # Emittiert den Katalogeintrag $id als 'Doku'-Ereignis (Begruendung im HTML/JSON).
+    $k = $CheckKatalog[$id]
+    if ($null -eq $k) { return }
+    Merken 'Doku' @{
+        CheckId    = $id
+        DTitel     = $k.Titel
+        Schwere    = $k.Schwere
+        Zweck      = $k.Zweck
+        Beispiel   = $k.Beispiel
+        Empfehlung = $k.Empfehlung
+        Quellen    = $k.Quellen
+    }
+}
 ####################################################################################################
 # Design Funktionen (Header, Vollzeile, Leerzeile, Buttom, Bereichstitel, Subtitel)                #
 ####################################################################################################
@@ -835,14 +1010,16 @@ function neu_text ($sub,$uze,[string]$ueb,[string]$text) {
 ####################################################################################################
 # Fehlerbehandlung: Kapselt einen Pruefbereich in try/catch                                        #
 ####################################################################################################
-function Pruefbereich ($titel,[scriptblock]$aktion) {
+function Pruefbereich ($titel,[scriptblock]$aktion,$CheckId) {
     ### Legende ####################################################################################
-    # $titel  = Ueberschrift des Bereichs (wird an Bereich durchgereicht)                          #
-    # $aktion = Scriptblock mit den Pruef-Funktionen des Bereichs                                  #
+    # $titel   = Ueberschrift des Bereichs (wird an Bereich durchgereicht)                         #
+    # $aktion  = Scriptblock mit den Pruef-Funktionen des Bereichs                                 #
+    # $CheckId = optionale Katalog-ID; emittiert die Begruendung (Doku) fuer HTML/JSON             #
     # Ein Fehler im Bereich bricht den Lauf nicht ab: Er wird im Report vermerkt, auf der          #
     # Konsole rot gemeldet, und es geht mit dem naechsten Bereich weiter.                          #
     ################################################################################################
     Bereich $titel
+    if ($CheckId) { Doku $CheckId }
     try { & $aktion }
     catch {
         $f_meldung = $_.Exception.Message
@@ -878,12 +1055,12 @@ function HTML_Report {
     $zielverz = Split-Path -Parent $ziel
     if (!(Test-Path $zielverz)) { New-Item -Path $zielverz -ItemType Directory | Out-Null }
     $css = @'
-:root{--bg:#ffffff;--text:#363636;--muted:#70777f;--border:#dbdbdb;--accent:#0076d1;--zebra:rgba(125,125,125,.07);--ok:#2e7d32;--warn:#a86500;--err:#c62828;--fehler-bg:rgba(198,40,40,.08)}
-@media(prefers-color-scheme:dark){:root{--bg:#1c1f25;--text:#dbdbdb;--muted:#8b939e;--border:#3a3f4b;--accent:#41adff;--zebra:rgba(125,125,125,.10);--ok:#7bc67e;--warn:#e0a458;--err:#ef6461;--fehler-bg:rgba(239,100,97,.12)}}
+:root{--bg:#ffffff;--text:#363636;--muted:#70777f;--border:#dbdbdb;--accent:#0076d1;--zebra:rgba(125,125,125,.07);--ok:#2e7d32;--warn:#a86500;--err:#c62828;--fehler-bg:rgba(198,40,40,.08);--info-bg:rgba(0,118,209,.06)}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1f25;--text:#dbdbdb;--muted:#8b939e;--border:#3a3f4b;--accent:#41adff;--zebra:rgba(125,125,125,.10);--ok:#7bc67e;--warn:#e0a458;--err:#ef6461;--fehler-bg:rgba(239,100,97,.12);--info-bg:rgba(65,173,255,.10)}}
 *{box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;max-width:960px;margin:0 auto;padding:1.5rem 1rem 3rem;background:var(--bg);color:var(--text);line-height:1.5}
 h1{font-size:1.9rem;margin:.5rem 0 .2rem}
-h2{font-size:1.35rem;margin:2.2rem 0 .6rem;padding-bottom:.25rem;border-bottom:2px solid var(--accent)}
+h2{font-size:1.35rem;margin:2.2rem 0 .6rem;padding-bottom:.25rem;border-bottom:2px solid var(--accent);scroll-margin-top:.5rem}
 h3{font-size:1.1rem;margin:1.5rem 0 .4rem}
 h4{font-size:1rem;margin:1.1rem 0 .3rem;color:var(--muted)}
 p{margin:.4rem 0}
@@ -895,6 +1072,18 @@ table.kv td:first-child{width:42%;color:var(--muted)}
 .meta{color:var(--muted);font-size:.9rem}
 .fehler{border-left:4px solid var(--err);background:var(--fehler-bg);padding:.6rem .9rem;margin:.8rem 0}
 footer{margin-top:3rem;border-top:1px solid var(--border);padding-top:.6rem}
+.badge{font-size:.72rem;font-weight:500;padding:1px 8px;border-radius:6px;vertical-align:middle;margin-left:8px;white-space:nowrap}
+.sev-krit{background:#F7C1C1;color:#501313}.sev-hoch{background:#F5C4B3;color:#4A1B0C}.sev-mit{background:#FAC775;color:#412402}.sev-nied{background:#B5D4F4;color:#042C53}.sev-info{background:#D3D1C7;color:#2C2C2A}
+details.doku{background:var(--info-bg);border:1px solid var(--border);border-radius:8px;padding:.3rem .8rem;margin:.2rem 0 1.2rem;font-size:.9rem}
+details.doku summary{cursor:pointer;color:var(--accent);font-weight:500;padding:.3rem 0}
+details.doku p{margin:.5rem 0;line-height:1.55}
+details.doku .lbl{font-weight:500;color:var(--muted)}
+.zus{margin:1rem 0 1.5rem;padding:.8rem 1rem;background:var(--zebra);border-radius:8px}
+.zus h2{margin:.2rem 0 .6rem;border:0;padding:0}
+.zus .counts{margin:.2rem 0 .8rem}
+.zus ul{margin:.2rem 0;padding-left:1.1rem;font-size:.95rem}
+.zus li{margin:.15rem 0}
+.zus a{color:var(--accent);text-decoration:none}
 '@
     $H = New-Object System.Text.StringBuilder
     $kopf = $R_Daten | Where-Object { $_.Art -eq 'Kopf' } | Select-Object -First 1
@@ -913,13 +1102,56 @@ footer{margin-top:3rem;border-top:1px solid var(--border);padding-top:.6rem}
         [void]$H.AppendLine("<p class=""meta"">$(Esc $kopf.Typ) &middot; System: $(Esc $kopf.System) &middot; $(Esc $kopf.Datum) &middot; $(Esc $kopf.Firma)</p>")
     }
     [void]$H.AppendLine('</header>')
+    function SevKlasse ($s) {
+        switch ("$s") {
+            'Kritisch' { 'sev-krit' ; break }
+            'Hoch'     { 'sev-hoch' ; break }
+            'Mittel'   { 'sev-mit'  ; break }
+            'Niedrig'  { 'sev-nied' ; break }
+            default    { 'sev-info' }
+        }
+    }
+    ### Zusammenfassung: Pruefbereiche nach Einstufung, mit Sprungmarken ##########################
+    $dokus = @($R_Daten | Where-Object { $_.Art -eq 'Doku' })
+    if ($dokus.Count -gt 0) {
+        $cnt = [ordered]@{ Kritisch = 0; Hoch = 0; Mittel = 0; Niedrig = 0; Info = 0 }
+        foreach ($d in $dokus) { if ($cnt.Contains("$($d.Schwere)")) { $cnt["$($d.Schwere)"]++ } }
+        [void]$H.AppendLine('<section class="zus">')
+        [void]$H.AppendLine('<h2>Zusammenfassung</h2>')
+        $teile = foreach ($s in $cnt.Keys) { "<span class=""badge $(SevKlasse $s)"">$s $($cnt[$s])</span>" }
+        [void]$H.AppendLine("<div class=""counts"">$($teile -join ' ')</div>")
+        [void]$H.AppendLine('<ul>')
+        foreach ($d in $dokus) {
+            [void]$H.AppendLine("<li><a href=""#chk-$($d.CheckId)"">$(Esc $d.DTitel)</a> <span class=""badge $(SevKlasse $d.Schwere)"">$(Esc $d.Schwere)</span></li>")
+        }
+        [void]$H.AppendLine('</ul>')
+        [void]$H.AppendLine('<p class="meta">Hinweis: Die Einstufung bewertet die Wichtigkeit des Pruefbereichs, nicht zwingend einen konkreten Befund. Begruendung und Empfehlung je Bereich im jeweiligen Block "Hintergrund &amp; Empfehlung".</p>')
+        [void]$H.AppendLine('</section>')
+    }
     $offen = ''                                  # aktuell geoeffnete Tabelle: '' | 'kv' | 'tab'
-    foreach ($e in $R_Daten) {
+    for ($ix = 0; $ix -lt $R_Daten.Count; $ix++) {
+        $e = $R_Daten[$ix]
         if ($e.Art -ne 'Wert' -and $e.Art -ne 'TabZeile' -and $offen) {
             [void]$H.AppendLine('</table>') ; $offen = ''
         }
         switch ($e.Art) {
-            'Bereich'  { [void]$H.AppendLine("<h2>$(Esc $e.Titel)</h2>") }
+            'Bereich'  {
+                # Folgt direkt ein Doku-Ereignis, bekommt die Ueberschrift Anker-ID und Severity-Badge.
+                $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
+                if ($next -and $next.Art -eq 'Doku') {
+                    [void]$H.AppendLine("<h2 id=""chk-$($next.CheckId)"">$(Esc $e.Titel) <span class=""badge $(SevKlasse $next.Schwere)"">$(Esc $next.Schwere)</span></h2>")
+                } else {
+                    [void]$H.AppendLine("<h2>$(Esc $e.Titel)</h2>")
+                }
+            }
+            'Doku'     {
+                [void]$H.AppendLine('<details class="doku"><summary>Hintergrund &amp; Empfehlung</summary>')
+                [void]$H.AppendLine("<p><span class=""lbl"">Zweck:</span> $(Esc $e.Zweck)</p>")
+                [void]$H.AppendLine("<p><span class=""lbl"">Beispiel:</span> $(Esc $e.Beispiel)</p>")
+                [void]$H.AppendLine("<p><span class=""lbl"">Empfehlung:</span> $(Esc $e.Empfehlung)</p>")
+                [void]$H.AppendLine("<p><span class=""lbl"">Quellen:</span> $(Esc $e.Quellen)</p>")
+                [void]$H.AppendLine('</details>')
+            }
             'Titel'    { [void]$H.AppendLine("<h3>$(Esc $e.Text)</h3>") }
             'Subtitel' { [void]$H.AppendLine("<h4>$(Esc $e.Text)</h4>") }
             'Wert'     {
@@ -3461,7 +3693,7 @@ Puffer_leeren
 ## Bereich Domain, Mode, FSMO                                                                     ##
 ####################################################################################################
 if($domoco -ge 1){
-    Pruefbereich "Domain, Mode, FSMO" {
+    Pruefbereich "Domain, Mode, FSMO" -CheckId 'domain_allgemein' {
         Leerzeile
         dom_allgemein
     }
@@ -3470,7 +3702,7 @@ if($domoco -ge 1){
 ## Bereich "Central Store & Templates"                                                            ##
 ####################################################################################################
 if($censto -ge 1 -or $sectem -ge 1){
-    Pruefbereich "Central Store & Templates" {
+    Pruefbereich "Central Store & Templates" -CheckId 'central_store' {
         if($censto -ge 1){ centralstore }
         if($sectem -ge 1){ sec_templates }
     }
@@ -3479,7 +3711,7 @@ if($censto -ge 1 -or $sectem -ge 1){
 ## Bereich Domain Controller                                                                      ##
 ####################################################################################################
 if ($domdcs -ge 1) {
-    Pruefbereich "Domain Controller" {
+    Pruefbereich "Domain Controller" -CheckId 'domain_controller' {
         Leerzeile
         controller
     }
@@ -3488,7 +3720,7 @@ if ($domdcs -ge 1) {
 ## Bereich "Logging auf Domain Controller(n)"                                                     ##
 ####################################################################################################
 if($loggin -ge 1){
-    Pruefbereich "Logging auf Domain Controller(n)" {
+    Pruefbereich "Logging auf Domain Controller(n)" -CheckId 'logging' {
         Leerzeile
         Event_dienst
         Auditcheck
@@ -3498,7 +3730,7 @@ if($loggin -ge 1){
 ## Bereich "AD-Trusts - Check"                                                                    ##
 ####################################################################################################
 if($adtchk -ge 1){
-    Pruefbereich "AD-Trusts - Check" {
+    Pruefbereich "AD-Trusts - Check" -CheckId 'trusts' {
         Leerzeile
         trusts
     }
@@ -3507,7 +3739,7 @@ if($adtchk -ge 1){
 ## Bereich "DNS - Check"                                                                          ##
 ####################################################################################################
 if($dnschk -ge 1){
-    Pruefbereich "DNS - Check" {
+    Pruefbereich "DNS - Check" -CheckId 'dns' {
         Leerzeile
         aging
     }
@@ -3516,7 +3748,7 @@ if($dnschk -ge 1){
 ## Bereich "Sysvol Replication & AD-Health"                                                       ##
 ####################################################################################################
 if($SysRep -ge 1){
-    Pruefbereich "Sysvol Replication & AD-Health" {
+    Pruefbereich "Sysvol Replication & AD-Health" -CheckId 'sysvol_health' {
         Leerzeile
         dfsr
         controller_check
@@ -3526,7 +3758,7 @@ if($SysRep -ge 1){
 ## Bereich "Administratoren und Builtin Benutzer"                                                 ##
 ####################################################################################################
 if($admusr -ge 1){
-    Pruefbereich "Administratoren und Builtin Benutzer" {
+    Pruefbereich "Administratoren und Builtin Benutzer" -CheckId 'admins' {
         Leerzeile
         Admins
         if($lokadm -eq 1) { lokale_AdmGru }
@@ -3539,7 +3771,7 @@ if($admusr -ge 1){
 ## Bereich "Benutzer und Benutzer Accounts"                                                       ##
 ####################################################################################################
 if ($usrchk -eq 1) {
-    Pruefbereich "Benutzer und Benutzer Accounts" {
+    Pruefbereich "Benutzer und Benutzer Accounts" -CheckId 'benutzer' {
         Leerzeile
         User_chk
         if($inachk -eq 1) { inaktive_User }
@@ -3551,7 +3783,7 @@ if ($usrchk -eq 1) {
 ## Bereich "Computerkonten Check"                                                                 ##
 ####################################################################################################
 if ($syschk -eq 1) {
-    Pruefbereich 'Computerkonten Check' {
+    Pruefbereich 'Computerkonten Check' -CheckId 'computerkonten' {
         Leerzeile
         sys_konten
     }
@@ -3560,7 +3792,7 @@ if ($syschk -eq 1) {
 ## Bereich "Client Check"                                                                         ##
 ####################################################################################################
 if($cltchk -ge 1){
-    Pruefbereich "Client Check" {
+    Pruefbereich "Client Check" -CheckId 'clients' {
         Leerzeile
         clt_chk
     }
@@ -3569,7 +3801,7 @@ if($cltchk -ge 1){
 ## Bereich "Client Check"                                                                         ##
 ####################################################################################################
 if($srvchk -ge 1){
-    Pruefbereich "Server Check" {
+    Pruefbereich "Server Check" -CheckId 'server' {
         Leerzeile
         srv_chk
     }
@@ -3578,7 +3810,7 @@ if($srvchk -ge 1){
 ## Bereich "Nicht Windows Systeme"                                                                ##
 ####################################################################################################
 if($no_win -eq 1){
-    Pruefbereich 'Nicht "Windows" Systeme' {
+    Pruefbereich 'Nicht "Windows" Systeme' -CheckId 'nicht_windows' {
         Leerzeile
         oth_chk
     }
@@ -3587,7 +3819,7 @@ if($no_win -eq 1){
 ## Bereich "AD-Gruppen"                                                                           ##
 ####################################################################################################
 if($allgru -ge 1){
-    Pruefbereich "AD-Gruppen" {
+    Pruefbereich "AD-Gruppen" -CheckId 'ad_gruppen' {
         Leerzeile
         ad_gruppen
     }
@@ -3596,7 +3828,7 @@ if($allgru -ge 1){
 ## Bereich "GPO's"                                                                                ##
 ####################################################################################################
 if($allgpo -ge 1){
-    Pruefbereich "GPO's" {
+    Pruefbereich "GPO's" -CheckId 'gpos' {
         Leerzeile
         GPO_all
         Leerzeile
@@ -3606,7 +3838,7 @@ if($allgpo -ge 1){
 ## Bereich "dDP Password Settings"                                                                ##
 ####################################################################################################
 if($dDPchk -ge 1){
-    Pruefbereich "dDP Password Settings" {
+    Pruefbereich "dDP Password Settings" -CheckId 'ddp_password' {
         Leerzeile
         ddomainpol
         #spezial_user
@@ -3616,7 +3848,7 @@ if($dDPchk -ge 1){
 ## Bereich "fGPP - fine Grained Password Policies"                                                ##
 ####################################################################################################
 if($fgppch -ge 1){
-    Pruefbereich "fine Grained Password Policies" {
+    Pruefbereich "fine Grained Password Policies" -CheckId 'fgpp' {
         Leerzeile
         fGPO
     }
@@ -3625,7 +3857,7 @@ if($fgppch -ge 1){
 ## Bereich "User vs Password Policies"                                                            ##
 ####################################################################################################
 if($userpw -ge 1){
-    Pruefbereich "User vs Password Policies" {
+    Pruefbereich "User vs Password Policies" -CheckId 'user_vs_pw' {
         Leerzeile
         spezial_user
     }
@@ -3634,7 +3866,7 @@ if($userpw -ge 1){
 ## Bereich "Organisation Units"                                                                   ##
 ####################################################################################################
 if($OrgUni -ge 1){
-    Pruefbereich "Organisation Units" {
+    Pruefbereich "Organisation Units" -CheckId 'ous' {
         Leerzeile
         OUS
     }
@@ -3652,7 +3884,7 @@ if($OrgUni -ge 1){
 ## Bereich "Managed Service Accounts (MSA/gMSA)"                                                  ##
 ####################################################################################################
 if($manacc -ge 1){
-    Pruefbereich "Managed Service Accounts (MSA/gMSA)" {
+    Pruefbereich "Managed Service Accounts (MSA/gMSA)" -CheckId 'msa' {
         Leerzeile
         KDSR
         MSA
@@ -3663,7 +3895,7 @@ if($manacc -ge 1){
 ## Bereich "Zertifizierungsstelle(n)"                                                             ##
 ####################################################################################################
 if($caschk -ge 1){
-    Pruefbereich "Zertifizierungsstelle(n)" {
+    Pruefbereich "Zertifizierungsstelle(n)" -CheckId 'ca' {
         Leerzeile
         ca_root
         ca_sub
@@ -3674,7 +3906,7 @@ if($caschk -ge 1){
 ## Bereich "Domain Controller"                                                                    ##
 ####################################################################################################
 if ($DomCon -ge 1) {
-    Pruefbereich "Domain Controller" {
+    Pruefbereich "Domain Controller" -CheckId 'dc_detail' {
         Leerzeile
         AD_Controller
     }
