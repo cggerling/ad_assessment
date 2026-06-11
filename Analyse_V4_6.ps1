@@ -165,6 +165,8 @@ $caschk = 1                                      # CA Check aus/ein             
 $DomCon = 1                                      # DC Check aus/ein     (0=nein,1=Teil,2=komplett) #
 # Sicherheit: Kerberos-Angriffsflaechen (v5.0)   ###################################################
 $kerbchk = 1                                     # Kerberos-Checks (Paket A)         (0=nein,1=ja) #
+# Sicherheit: Privilegien & ACLs (v5.0)          ###################################################
+$privchk = 1                                     # Privilegien-/ACL-Checks (Paket B) (0=nein,1=ja) #
 ####################################################################################################
 # Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
 ################################################################                                   #
@@ -177,7 +179,8 @@ if ($Bereiche) {                                 # Einzelne Schalter per Hashtab
     $schalterListe = @('domoco','schema','censto','sectem','domdcs','loggin','adtchk','dnschk',    #
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
                        'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
-                       'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk')   #
+                       'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk',   #
+                       'privchk')                                                                  #
     foreach ($schalter in $Bereiche.Keys) {                                                        #
         if ($schalterListe -contains $schalter) {                                                  #
             Set-Variable -Name $schalter -Value ([int]$Bereiche[$schalter])                        #
@@ -552,6 +555,72 @@ $CheckKatalog = @{
             @{ Titel = 'Microsoft Learn - MS-DS-Machine-Account-Quota attribute'; Url = 'https://learn.microsoft.com/en-us/windows/win32/adschema/a-ms-ds-machineaccountquota' }
             @{ Titel = 'Shenanigans Labs (Elad Shamir) - Wagging the Dog (MachineAccountQuota + RBCD)'; Url = 'https://shenaniganslabs.io/2019/01/28/Wagging-the-Dog.html' }
             @{ Titel = 'NVD - CVE-2021-42278 (noPac, sAMAccountName Spoofing)'; Url = 'https://nvd.nist.gov/vuln/detail/CVE-2021-42278' }
+        )
+    }
+    'privilegien' = @{
+        Titel = 'Privilegien & ACLs'; Schwere = 'Hoch'
+        Zweck = 'Bündelt Prüfungen rund um privilegierte Rechte und gefährliche Berechtigungen im Verzeichnis: DCSync-Rechte, riskante Operatoren-/Admin-Gruppen, die AdminSDHolder-ACL, die Nutzung von Protected Users und die Pre-Windows-2000-Kompatibilität.'
+        Hintergrund = 'Über die reine Gruppenmitgliedschaft hinaus entscheiden Verzeichnis-ACLs, wer privilegierte Operationen ausführen darf. Schon einzelne delegierte Rechte (z. B. Verzeichnis-Replikation oder Schreibrechte auf AdminSDHolder) können einer nicht-privilegierten Identität die vollständige Domänenübernahme ermöglichen. Diese Teilprüfungen lesen die entsprechenden Gruppen und ACLs read-only aus.'
+        Beispiel = 'Ein an einen Anwendungs-Account delegiertes "Replicating Directory Changes All" genügt, um per DCSync alle Passwort-Hashes (inkl. krbtgt) abzuziehen.'
+        Empfehlung = 'Privilegierte Rechte und ACLs auf das Nötigste reduzieren (Tier-0-Modell); delegierte Sonderrechte regelmäßig überprüfen und dokumentieren.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+            @{ Titel = 'Microsoft Learn - Appendix C: Protected Accounts and Groups in Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory' }
+        )
+    }
+    'dcsync' = @{
+        Titel = 'DCSync-Rechte (Verzeichnis-Replikation)'; Schwere = 'Kritisch'
+        Zweck = 'Prüft am Domänenobjekt, welche Prinzipale die erweiterten Rechte "Replicating Directory Changes" und "Replicating Directory Changes All" besitzen - und meldet alle, die nicht zu den Standard-Berechtigten (DCs, Administratoren, SYSTEM) gehören.'
+        Hintergrund = 'DCSync missbraucht die Verzeichnis-Replikations-API (MS-DRSR / IDL_DRSGetNCChanges): Wer die Rechte DS-Replication-Get-Changes (GUID 1131f6aa-...) und Get-Changes-All (1131f6ad-...) auf dem Domänen-Naming-Context hat, kann sich gegenüber einem DC als DC ausgeben und beliebige Geheimnisse - inklusive der Passwort-Hashes aller Konten und des krbtgt-Schlüssels - abrufen, ohne Code auf einem DC auszuführen. Diese Rechte stehen normalerweise nur DCs, Administratoren und SYSTEM zu.'
+        Beispiel = 'Ein kompromittierter Account mit delegiertem Get-Changes-All zieht per Mimikatz/secretsdump alle Hashes und erzeugt anschließend ein Golden Ticket - vollständige Domänenübernahme.'
+        Empfehlung = 'Replikationsrechte ausschließlich Domänencontrollern gewähren; versehentlich delegierte Get-Changes(-All)-ACEs an Benutzern/Gruppen/Dienstkonten entfernen; Hybrid-Konten (z. B. Azure AD Connect / MSOL_) gezielt absichern und überwachen.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1003.006 - OS Credential Dumping: DCSync'; Url = 'https://attack.mitre.org/techniques/T1003/006/' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'operatoren' = @{
+        Titel = 'Gefährliche Builtin-/Operatoren-Gruppen'; Schwere = 'Hoch'
+        Zweck = 'Listet die Mitglieder sicherheitskritischer, oft übersehener Gruppen: Account/Server/Print/Backup Operators sowie Schema- und Enterprise Admins. Diese Gruppen sollten im Normalbetrieb leer oder minimal besetzt sein.'
+        Hintergrund = 'Diese Builtin-Gruppen verleihen indirekt Tier-0-äquivalente Macht: Account Operators können (fast) beliebige Konten/Gruppen verwalten; Server/Print/Backup Operators dürfen sich an DCs anmelden bzw. Sicherungs-/Wiederherstellungsrechte nutzen, mit denen sich die AD-Datenbank (NTDS.dit) auslesen lässt; Schema und Enterprise Admins sind forestweit allmächtig. Microsoft schützt sie via AdminSDHolder, empfiehlt aber, ihre Nutzung zu minimieren.'
+        Beispiel = 'Ein Mitglied von Backup Operators sichert die NTDS.dit eines DCs und extrahiert offline alle Passwort-Hashes - ohne je Domain Admin gewesen zu sein.'
+        Empfehlung = 'Mitgliedschaften dieser Gruppen entfernen bzw. auf das absolut Notwendige beschränken; statt dauerhafter Mitgliedschaft Just-in-time-Modelle nutzen; DnsAdmins gesondert prüfen (DLL-Ladepfad auf DCs).'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Appendix C: Protected Accounts and Groups in Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory' }
+            @{ Titel = 'Microsoft Learn - Active Directory Security Groups'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups' }
+        )
+    }
+    'adminsdholder' = @{
+        Titel = 'AdminSDHolder-ACL'; Schwere = 'Hoch'
+        Zweck = 'Prüft die ACL des AdminSDHolder-Objekts (CN=AdminSDHolder,CN=System,...) auf nicht-standardmäßige Prinzipale mit Schreib-/Vollzugriffsrechten.'
+        Hintergrund = 'Der SDProp-Prozess kopiert die ACL des AdminSDHolder-Objekts alle 60 Minuten auf alle geschützten Konten/Gruppen (AdminCount=1) und überschreibt deren Berechtigungen. Trägt ein Angreifer hier einen eigenen Prinzipal mit z. B. GenericAll/WriteDacl ein, erhält er dadurch dauerhaft Schreibzugriff auf alle Tier-0-Konten - eine verbreitete, schwer zu entdeckende Persistenz-Technik.'
+        Beispiel = 'Ein WriteDacl-Recht für einen unscheinbaren Account auf AdminSDHolder wird per SDProp auf Domain Admins vererbt; der Account kann sich anschließend selbst Vollzugriff auf jeden Admin geben.'
+        Empfehlung = 'Auf AdminSDHolder nur die Standard-Prinzipale (SYSTEM, Domain/Enterprise Admins, Administratoren) mit Schreibrechten zulassen; abweichende ACEs entfernen und ihre Herkunft untersuchen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Appendix C: Protected Accounts and Groups in Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'protected_users' = @{
+        Titel = 'Protected Users (Nutzung)'; Schwere = 'Mittel'
+        Zweck = 'Prüft, ob die Gruppe "Protected Users" verwendet wird, und listet ihre Mitglieder. Standardmäßig ist sie leer.'
+        Hintergrund = 'Mitglieder der Gruppe Protected Users erhalten nicht abschaltbare Schutzmaßnahmen: keine NTLM-Authentifizierung, kein DES/RC4 in der Kerberos-Vorauthentifizierung (nur AES), keine Delegation, kein zwischengespeicherter Credential-Verifier und ein auf 240 Minuten begrenztes TGT. Das reduziert die Wirkung von Credential-Theft erheblich. Dienst- und Computerkonten gehören NICHT hinein (deren Passwort liegt ohnehin lokal vor).'
+        Beispiel = 'Sind privilegierte Benutzerkonten nicht in Protected Users, lässt sich ihr NTLM-Hash per Pass-the-Hash weiterverwenden; als Mitglied wäre dieser Weg blockiert.'
+        Empfehlung = 'Privilegierte Benutzerkonten (keine Dienst-/Computerkonten) nach sorgfältigem Test in Protected Users aufnehmen; Funktionsebene >= 2012 R2 und vorhandene AES-Schlüssel sicherstellen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Protected Users Security Group'; Url = 'https://learn.microsoft.com/en-us/windows-server/security/credentials-protection-and-management/protected-users-security-group' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'prewin2000' = @{
+        Titel = 'Pre-Windows 2000 Compatible Access'; Schwere = 'Mittel'
+        Zweck = 'Prüft die Mitgliedschaft der Gruppe "Pre-Windows 2000 Compatible Access" - kritisch ist die Aufnahme von "Jeder" (Everyone) oder "Anonymous-Anmeldung".'
+        Hintergrund = 'Diese Builtin-Gruppe existiert aus Kompatibilitätsgründen mit sehr alten Systemen und gewährt Lesezugriff auf viele AD-Objekte. Enthält sie "Everyone" oder "Anonymous Logon", können auch nicht authentifizierte bzw. beliebige Benutzer umfangreiche Verzeichnisinformationen (z. B. Benutzer- und Gruppenlisten) auslesen - wertvolle Aufklärung für Angreifer.'
+        Beispiel = 'Ist "Anonymous Logon" Mitglied, kann ein Angreifer ohne gültiges Konto Benutzernamen und Gruppen enumerieren und so Spraying-/Roasting-Ziele finden.'
+        Empfehlung = '"Everyone"/"Anonymous Logon" aus der Gruppe entfernen, sofern keine echten Legacy-Abhängigkeiten bestehen; die Mitgliedschaft auf das Nötigste reduzieren.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Active Directory Security Groups'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
         )
     }
 }
@@ -3943,6 +4012,107 @@ function chk_machine_quota {
     2werte "Empfohlener Wert:" "0" "s"
 }
 ####################################################################################################
+# Sicherheit Paket B: Privilegien & ACLs (read-only LDAP-/ACL-Abfragen)                            #
+####################################################################################################
+function chk_dcsync {
+    # Wer hat Replikationsrechte (Get-Changes / Get-Changes-All) am Domaenenobjekt? -> DCSync.
+    $domDN = (Get-ADDomain).DistinguishedName
+    $acl   = Get-Acl -Path "AD:\$domDN"
+    $rids  = @{ '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2' = 'Get-Changes'
+                '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2' = 'Get-Changes-All' }
+    # Standard-Berechtigte (Namens-Suffix), die Replikation legitim besitzen:
+    $ok = 'Domain Controllers','Enterprise Read-Only Domain Controllers','Administrators',
+          'SYSTEM','Enterprise Domain Controllers','Domain Admins','Enterprise Admins'
+    $verdaechtig = @()
+    foreach ($ace in $acl.Access) {
+        if ($ace.AccessControlType -ne 'Allow') { continue }
+        $guid = "$($ace.ObjectType)"
+        if (-not $rids.ContainsKey($guid)) { continue }
+        $kurz = ("$($ace.IdentityReference)" -split '\\')[-1]
+        if ($ok -notcontains $kurz) {
+            $verdaechtig += [pscustomobject]@{ Wer = "$($ace.IdentityReference)"; Recht = $rids[$guid] }
+        }
+    }
+    if ($verdaechtig.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Nicht-Standard-Prinzipale mit Replikationsrecht:" "$($verdaechtig.Count)" "s" $fa
+    foreach ($v in $verdaechtig) { 2werte " $($v.Wer)" $v.Recht "s" $F_Fehler }
+    if ($verdaechtig.Count -eq 0) { 2werte " Hinweis:" "nur Standard-Berechtigte (DCs/Admins)" "s" "Green" }
+}
+function chk_operatoren {
+    $domSID = (Get-ADDomain).DomainSID.Value
+    $gruppen = @(
+        @{ N = 'Account Operators'; SID = 'S-1-5-32-548' }
+        @{ N = 'Server Operators';  SID = 'S-1-5-32-549' }
+        @{ N = 'Print Operators';   SID = 'S-1-5-32-550' }
+        @{ N = 'Backup Operators';  SID = 'S-1-5-32-551' }
+        @{ N = 'Schema Admins';     SID = "$domSID-518" }
+        @{ N = 'Enterprise Admins'; SID = "$domSID-519" }
+    )
+    foreach ($g in $gruppen) {
+        try {
+            $m = @(Get-ADGroupMember -Identity $g.SID -ErrorAction Stop)
+            if ($m.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+            2werte " $($g.N):" "$($m.Count) Mitglieder" "s" $fa
+            foreach ($mm in $m) { 2werte "   - $($mm.SamAccountName)" "$($mm.objectClass)" "s" $F_Fehler }
+        } catch {
+            2werte " $($g.N):" "nicht abfragbar (evtl. Child-Domain)" "s" "Yellow"
+        }
+    }
+    try {
+        $dns = @(Get-ADGroupMember -Identity 'DnsAdmins' -ErrorAction Stop)
+        if ($dns.Count -gt 0) { $fa = 'Yellow' } else { $fa = 'Green' }
+        2werte " DnsAdmins:" "$($dns.Count) Mitglieder" "s" $fa
+        foreach ($mm in $dns) { 2werte "   - $($mm.SamAccountName)" "$($mm.objectClass)" "s" "Yellow" }
+    } catch { 2werte " DnsAdmins:" "nicht vorhanden/abfragbar" "s" "Green" }
+}
+function chk_adminsdholder {
+    $domDN = (Get-ADDomain).DistinguishedName
+    $acl   = Get-Acl -Path "AD:\CN=AdminSDHolder,CN=System,$domDN"
+    $gefaehrlich = 'GenericAll','GenericWrite','WriteDacl','WriteOwner','WriteProperty','AllExtendedRights'
+    $ok = 'SYSTEM','Domain Admins','Enterprise Admins','Administrators','CREATOR OWNER','SELF'
+    $auffaellig = @()
+    foreach ($ace in $acl.Access) {
+        if ($ace.AccessControlType -ne 'Allow') { continue }
+        $rechte = "$($ace.ActiveDirectoryRights)"
+        $hat = $false
+        foreach ($r in $gefaehrlich) { if ($rechte -match $r) { $hat = $true; break } }
+        if (-not $hat) { continue }
+        $kurz = ("$($ace.IdentityReference)" -split '\\')[-1]
+        if ($ok -notcontains $kurz) {
+            $auffaellig += [pscustomobject]@{ Wer = "$($ace.IdentityReference)"; Recht = $rechte }
+        }
+    }
+    if ($auffaellig.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Nicht-Standard-Prinzipale mit Schreibrecht auf AdminSDHolder:" "$($auffaellig.Count)" "s" $fa
+    foreach ($a in $auffaellig) { 2werte " $($a.Wer)" $a.Recht "s" $F_Fehler }
+    if ($auffaellig.Count -eq 0) { 2werte " Hinweis:" "nur Standard-Prinzipale" "s" "Green" }
+}
+function chk_protected_users {
+    $domSID = (Get-ADDomain).DomainSID.Value
+    try {
+        $pu = @(Get-ADGroupMember -Identity "$domSID-525" -ErrorAction Stop)
+        if ($pu.Count -eq 0) {
+            2werte "Protected Users - Mitglieder:" "0 (Gruppe ungenutzt)" "s" "Yellow"
+        } else {
+            2werte "Protected Users - Mitglieder:" "$($pu.Count)" "s" "Green"
+            foreach ($mm in $pu) { 2werte "   - $($mm.SamAccountName)" "$($mm.objectClass)" "s" "Green" }
+        }
+    } catch { 2werte "Protected Users:" "nicht abfragbar" "s" "Yellow" }
+}
+function chk_prewin2000 {
+    try {
+        $pw = @(Get-ADGroupMember -Identity 'S-1-5-32-554' -ErrorAction Stop)
+        $kritSids = @('S-1-1-0','S-1-5-7')   # Everyone, Anonymous Logon
+        $krit = @($pw | Where-Object { $kritSids -contains "$($_.SID)" })
+        if ($krit.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+        2werte "Pre-Windows 2000 - Mitglieder:" "$($pw.Count)" "s" $fa
+        foreach ($mm in $pw) {
+            if ($kritSids -contains "$($mm.SID)") { $mfa = $F_Fehler } else { $mfa = $F_Text }
+            2werte "   - $($mm.SamAccountName)" "$($mm.SID)" "s" $mfa
+        }
+    } catch { 2werte "Pre-Windows 2000 Compatible Access:" "nicht abfragbar (ggf. Spezial-Identitaeten)" "s" "Yellow" }
+}
+####################################################################################################
 ####################################################################################################
 ##### Main                                                                                     #####
 ####################################################################################################
@@ -4041,6 +4211,19 @@ if($kerbchk -ge 1){
         Unterpruefung "Delegation (Unconstrained / Constrained / RBCD)" 'delegation' { chk_delegation }
         Unterpruefung "Schwache Kerberos-Verschluesselung" 'kerb_enc' { chk_kerb_enc }
         Unterpruefung "Computerkonten-Kontingent (MachineAccountQuota)" 'machine_quota' { chk_machine_quota }
+    }
+}
+####################################################################################################
+## Bereich "Privilegien & ACLs" (Paket B)                                                         ##
+####################################################################################################
+if($privchk -ge 1){
+    Pruefbereich "Privilegien & ACLs" -CheckId 'privilegien' {
+        Leerzeile
+        Unterpruefung "DCSync-Rechte (Verzeichnis-Replikation)" 'dcsync' { chk_dcsync }
+        Unterpruefung "Gefaehrliche Builtin-/Operatoren-Gruppen" 'operatoren' { chk_operatoren }
+        Unterpruefung "AdminSDHolder-ACL" 'adminsdholder' { chk_adminsdholder }
+        Unterpruefung "Protected Users (Nutzung)" 'protected_users' { chk_protected_users }
+        Unterpruefung "Pre-Windows 2000 Compatible Access" 'prewin2000' { chk_prewin2000 }
     }
 }
 ####################################################################################################
