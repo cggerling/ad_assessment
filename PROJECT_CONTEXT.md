@@ -123,6 +123,19 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Paket B – Privilegien & ACLs" (Juni 2026):**
+- Neuer Schalter `$privchk` (Default 1, in Whitelist) und Bereich „Privilegien & ACLs".
+- Fünf read-only Checks: DCSync-Rechte (Replikations-ACEs am Domänenobjekt, GUIDs
+  1131f6aa/1131f6ad), gefährliche Builtin-/Operatoren-Gruppen (Well-Known-SIDs S-1-5-32-548..551,
+  Schema/Enterprise Admins, DnsAdmins), AdminSDHolder-ACL (Nicht-Standard-Schreibrechte),
+  Protected Users (Nutzung, SID -525), Pre-Windows 2000 Compatible Access (Everyone/Anonymous,
+  SID S-1-5-32-554).
+- Sechs neue Katalogeinträge (privilegien, dcsync=Kritisch, operatoren, adminsdholder,
+  protected_users, prewin2000) mit Hintergrund + live-verifizierten Links (MITRE T1003.006,
+  MS Protected Users/Protected Accounts/Security Groups, Best practices for securing AD).
+- Testsuite auf 69 Tests. **AD-Abfragen (Get-Acl AD:\, Get-ADGroupMember) nicht lokal
+  testbar -> Funktionstest am DC.**
+
 **v5.0 PR „Doku-Tiefe für die 22 Inventar-Checks" (Juni 2026):**
 - Alle 22 Inventar-/Bestands-Checks auf Paket-A-Niveau gehoben: je ein Feld `Hintergrund`
   (Technik/Protokoll/Schwachstelle) und `Quellen` als Liste **live-verifizierter** Links.
