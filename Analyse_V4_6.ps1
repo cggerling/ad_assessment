@@ -413,45 +413,72 @@ $CheckKatalog = @{
     }
     'kerberos' = @{
         Titel = 'Kerberos - Angriffsflächen'; Schwere = 'Hoch'
-        Zweck = 'Bündelt die wichtigsten Kerberos-bezogenen Angriffsflächen einer AD-Umgebung: angreifbare Dienstkonten, fehlende Vorauthentifizierung, missbrauchbare Delegation, schwache Verschlüsselung und das Computerkonten-Kontingent.'
+        Zweck = 'Bündelt die wichtigsten Kerberos-bezogenen Angriffsflächen einer AD-Umgebung: angreifbare Dienstkonten (SPN), Konten ohne Vorauthentifizierung, missbrauchbare Delegation, schwache Verschlüsselung und das Computerkonten-Kontingent.'
+        Hintergrund = 'Kerberos ist das Standard-Authentifizierungsprotokoll in AD. Ein Client erhält vom KDC (Domain Controller) ein Ticket-Granting Ticket (TGT) und damit Service-Tickets (TGS) für einzelne Dienste. Mehrere Konto-Eigenschaften bestimmen, wie angreifbar diese Tickets sind: der servicePrincipalName, userAccountControl-Flags (z. B. DONT_REQ_PREAUTH 0x400000, TRUSTED_FOR_DELEGATION 0x80000, USE_DES_KEY_ONLY 0x200000), die Delegations-Attribute und msDS-SupportedEncryptionTypes. Die folgenden Teilprüfungen lesen genau diese Attribute read-only per LDAP aus.'
         Beispiel = 'Diese Schwachstellen erlauben es einem normalen Domänenbenutzer häufig, ohne Adminrechte an privilegierte Anmeldedaten zu gelangen - ein klassischer Einstieg in die Domänenübernahme.'
         Empfehlung = 'Die einzelnen Teilprüfungen abarbeiten; Dienstkonten auf gMSA umstellen, AES erzwingen, Delegation minimieren und das Kontingent auf 0 setzen.'
-        Quellen = 'MITRE ATT&CK TA0006 (Credential Access); Microsoft - Securing Privileged Access; adsecurity.org'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1558 - Steal or Forge Kerberos Tickets'; Url = 'https://attack.mitre.org/techniques/T1558/' }
+            @{ Titel = 'Microsoft Learn - UserAccountControl property flags'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties' }
+        )
     }
     'kerberoasting' = @{
         Titel = 'Kerberoasting (Konten mit SPN)'; Schwere = 'Hoch'
-        Zweck = 'Listet aktivierte Benutzerkonten (keine Computer) mit gesetztem servicePrincipalName auf. Solche Konten geben Kerberos-Service-Tickets aus, deren Verschlüsselung vom Kontopasswort abgeleitet ist und offline geknackt werden kann.'
-        Beispiel = 'Jeder Domänenbenutzer fordert für ein SPN-Konto ein Service-Ticket an und knackt es offline (z. B. Hashcat). Da das Knacken ohne DC-Kontakt läuft, bleibt es unauffällig. Steckt das Konto in Domain Admins, ist die Domäne kompromittiert.'
-        Empfehlung = 'Dienstkonten auf (group) Managed Service Accounts umstellen (automatische 120-Zeichen-Passwörter); sonst Passwörter >= 25 Zeichen, AES erzwingen, privilegierte Konten nie mit SPN betreiben.'
-        Quellen = 'MITRE ATT&CK T1558.003; Microsoft - Service Principal Names; adsecurity.org'
+        Zweck = 'Listet aktivierte Benutzerkonten (keine Computer) mit gesetztem servicePrincipalName (SPN) auf, krbtgt ausgenommen. Privilegierte Treffer (AdminCount=1) werden zusätzlich markiert.'
+        Hintergrund = 'Bei Kerberoasting fordert ein beliebiger authentifizierter Benutzer beim KDC ein Service-Ticket (TGS-REQ) für ein SPN-Konto an. Der verschlüsselte Teil des Tickets ist mit einem vom Kontopasswort abgeleiteten Schlüssel kodiert - meist RC4-HMAC, also dem NTLM-Hash des Dienstkontos. Das Ticket lässt sich exportieren und vollständig offline knacken (z. B. Hashcat-Modus 13100), ohne weitere DC-Interaktion und damit weitgehend unauffällig. Schwache Dienstkonto-Passwörter fallen so in Minuten bis Stunden.'
+        Beispiel = 'Jeder Domänenbenutzer fordert für ein SPN-Konto wie "svc-sql" ein Ticket an und knackt es offline. Steckt das Konto in "Domain Admins", ist die Domäne kompromittiert.'
+        Empfehlung = 'Dienstkonten auf (group) Managed Service Accounts umstellen (automatische 120-Zeichen-Passwörter); sonst Passwörter >= 25 Zeichen; msDS-SupportedEncryptionTypes der Konten auf AES beschränken (entzieht RC4-Tickets die Grundlage); privilegierte Konten nie mit SPN betreiben.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1558.003 - Kerberoasting'; Url = 'https://attack.mitre.org/techniques/T1558/003/' }
+            @{ Titel = 'Microsoft Learn - Service Principal Names'; Url = 'https://learn.microsoft.com/en-us/windows/win32/ad/service-principal-names' }
+            @{ Titel = 'adsecurity.org (Sean Metcalf) - Cracking Kerberos TGS Tickets Using Kerberoast'; Url = 'https://adsecurity.org/?p=2293' }
+        )
     }
     'asrep' = @{
         Titel = 'AS-REP Roasting (ohne Vorauthentifizierung)'; Schwere = 'Hoch'
-        Zweck = 'Findet Konten mit gesetztem Flag DONT_REQ_PREAUTH (Kerberos-Vorauthentifizierung nicht erforderlich). Für solche Konten kann ein Angreifer ohne jede Anmeldung ein verschlüsseltes Material anfordern und offline knacken.'
-        Beispiel = 'Ein Angreifer fragt für ein Konto ohne Pre-Auth einen AS-REP an und knackt das daraus ableitbare Passwort-Hash offline - ganz ohne gültige Anmeldedaten in der Domäne.'
-        Empfehlung = 'Flag "Kerberos-Preauthentifizierung nicht erforderlich" entfernen, wo immer möglich; betroffene Konten mit starken Passwörtern versehen bzw. deaktivieren.'
-        Quellen = 'MITRE ATT&CK T1558.004; Microsoft - userAccountControl flags (DONT_REQ_PREAUTH)'
+        Zweck = 'Findet aktivierte Konten mit gesetztem Flag DONT_REQ_PREAUTH (0x400000) - Kerberos-Vorauthentifizierung nicht erforderlich.'
+        Hintergrund = 'Normalerweise muss ein Client im ersten Schritt (AS-REQ) seine Identität durch einen mit dem Benutzerpasswort verschlüsselten Zeitstempel beweisen (Pre-Authentication). Ist DONT_REQ_PREAUTH gesetzt, entfällt dieser Schutz: Ein Angreifer sendet eine AS-REQ für das Konto und erhält eine AS-REP, deren verschlüsselter Teil (oft RC4) vom Benutzerpasswort abgeleitet ist - und damit offline knackbar (Hashcat-Modus 18200). Es ist keinerlei gültige Anmeldung nötig.'
+        Beispiel = 'Ein Angreifer mit reiner Netzwerksicht zählt Konten ohne Pre-Auth auf, holt deren AS-REP und knackt schwache Passwörter offline.'
+        Empfehlung = 'Flag "Kerberos-Preauthentifizierung nicht erforderlich" entfernen, wo immer möglich; verbleibende Konten mit langen, starken Passwörtern versehen oder deaktivieren.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1558.004 - AS-REP Roasting'; Url = 'https://attack.mitre.org/techniques/T1558/004/' }
+            @{ Titel = 'Microsoft Learn - UserAccountControl flags (DONT_REQ_PREAUTH 0x400000)'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties' }
+        )
     }
     'delegation' = @{
         Titel = 'Delegation (Unconstrained / Constrained / RBCD)'; Schwere = 'Hoch'
-        Zweck = 'Prüft Konten/Computer mit Kerberos-Delegationsrechten: uneingeschränkt (TrustedForDelegation), eingeschränkt (msDS-AllowedToDelegateTo) und ressourcenbasiert (msDS-AllowedToActOnBehalfOfOtherIdentity). Domänencontroller werden ausgenommen.'
-        Beispiel = 'Ein Computer mit uneingeschränkter Delegation kann Kerberos-Tickets beliebiger Benutzer (inkl. Domain Admins) zwischenspeichern und missbrauchen. RBCD-Einträge sind ein beliebter moderner Eskalationspfad.'
-        Empfehlung = 'Uneingeschränkte Delegation vermeiden; auf eingeschränkte Delegation (am besten mit Protocol Transition aus) umstellen; sensible Konten als "Konto ist vertraulich und kann nicht delegiert werden" markieren bzw. in Protected Users aufnehmen.'
-        Quellen = 'MITRE ATT&CK T1558; SpecterOps - Delegation/RBCD; Microsoft - Kerberos constrained delegation'
+        Zweck = 'Prüft Konten/Computer mit Kerberos-Delegationsrechten: uneingeschränkt (TRUSTED_FOR_DELEGATION 0x80000), eingeschränkt (msDS-AllowedToDelegateTo) und ressourcenbasiert (msDS-AllowedToActOnBehalfOfOtherIdentity). Domänencontroller werden ausgenommen.'
+        Hintergrund = 'Delegation erlaubt einem Dienst, im Namen eines Benutzers auf weitere Dienste zuzugreifen. Bei UNCONSTRAINED Delegation speichert der Server das weiterleitbare TGT jedes ankommenden Benutzers im Speicher - wird der Server kompromittiert, lassen sich diese TGTs (inkl. Domain Admins) abgreifen. CONSTRAINED Delegation (S4U2Proxy) beschränkt die Zieldienste, ist aber bei aktiviertem Protocol Transition (S4U2Self) ebenfalls missbrauchbar. RESOURCE-BASED Constrained Delegation (RBCD) wird am Zielobjekt gesetzt und ist ein verbreiteter Eskalationspfad, oft kombiniert mit dem Anlegen eines Computerkontos (siehe MachineAccountQuota).'
+        Beispiel = 'Ein Computer mit uneingeschränkter Delegation, der von einem Domänenadministrator kontaktiert wird, hält dessen TGT vor - der Angreifer extrahiert es und übernimmt die Domäne. RBCD-Einträge erlauben oft eine direkte Übernahme des Zielsystems.'
+        Empfehlung = 'Uneingeschränkte Delegation vermeiden; auf eingeschränkte Delegation ohne Protocol Transition umstellen; sensible Konten als "Konto ist vertraulich und kann nicht delegiert werden" (NOT_DELEGATED) markieren bzw. in "Protected Users" aufnehmen; RBCD-Einträge regelmäßig prüfen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Kerberos Constrained Delegation Overview'; Url = 'https://learn.microsoft.com/en-us/windows-server/security/kerberos/kerberos-constrained-delegation-overview' }
+            @{ Titel = 'Microsoft Learn - UserAccountControl flags (TRUSTED_FOR_DELEGATION 0x80000)'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties' }
+            @{ Titel = 'Shenanigans Labs (Elad Shamir) - Wagging the Dog: Abusing RBCD'; Url = 'https://shenaniganslabs.io/2019/01/28/Wagging-the-Dog.html' }
+        )
     }
     'kerb_enc' = @{
         Titel = 'Schwache Kerberos-Verschlüsselung'; Schwere = 'Mittel'
-        Zweck = 'Findet Konten, die ausschließlich DES verwenden (UAC-Flag UseDESKeyOnly). DES (und ebenso RC4) gelten als gebrochen bzw. veraltet und erleichtern das Knacken von Tickets erheblich.'
-        Beispiel = 'Ein Dienstkonto mit erzwungenem DES gibt Tickets aus, die mit heutiger Hardware sehr schnell zu brechen sind - ein bevorzugtes Kerberoasting-Ziel.'
-        Empfehlung = 'UseDESKeyOnly entfernen; AES (msDS-SupportedEncryptionTypes auf AES128/AES256) erzwingen und RC4 schrittweise abschalten.'
-        Quellen = 'Microsoft - Network security: Configure encryption types allowed for Kerberos; MITRE ATT&CK T1558'
+        Zweck = 'Findet Konten, die ausschließlich DES verwenden (UAC-Flag USE_DES_KEY_ONLY 0x200000).'
+        Hintergrund = 'Kerberos-Tickets können mit DES, RC4 oder AES verschlüsselt sein. DES (56-Bit) gilt seit Jahren als gebrochen; RC4-HMAC ist veraltet und erleichtert Offline-Angriffe wie Kerberoasting. Ab Windows 7 / Server 2008 R2 ist DES standardmäßig deaktiviert; Konten mit erzwungenem DES (USE_DES_KEY_ONLY) sind ein klares Risiko. Robust ist AES128/AES256, gesteuert über msDS-SupportedEncryptionTypes je Konto bzw. die GPO-Richtlinie.'
+        Beispiel = 'Ein Dienstkonto mit erzwungenem DES gibt schwach verschlüsselte Tickets aus, die sich mit heutiger Hardware extrem schnell brechen lassen.'
+        Empfehlung = 'USE_DES_KEY_ONLY entfernen; msDS-SupportedEncryptionTypes der Konten auf AES (Wert 0x18 = AES128 + AES256) setzen und RC4 schrittweise per GPO "Configure encryption types allowed for Kerberos" abschalten.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Network security: Configure encryption types allowed for Kerberos'; Url = 'https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/network-security-configure-encryption-types-allowed-for-kerberos' }
+            @{ Titel = 'Microsoft Learn - UserAccountControl flags (USE_DES_KEY_ONLY 0x200000)'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties' }
+        )
     }
     'machine_quota' = @{
         Titel = 'Computerkonten-Kontingent (MachineAccountQuota)'; Schwere = 'Hoch'
-        Zweck = 'Liest am Domänenobjekt das Attribut ms-DS-MachineAccountQuota aus - die Anzahl Computerkonten, die ein nicht-privilegierter Benutzer selbst in die Domäne aufnehmen darf. Standard ist 10.'
-        Beispiel = 'Mit jedem gültigen Benutzerkonto kann ein Angreifer bei Wert > 0 ein eigenes Computerkonto anlegen und dieses für Resource-Based Constrained Delegation oder die noPac-Lücke (CVE-2021-42278/42287) zur Rechteausweitung missbrauchen.'
-        Empfehlung = 'Wert auf 0 setzen und das Anlegen von Computerkonten an eine dedizierte, delegierte Gruppe binden.'
-        Quellen = 'Microsoft Learn - ms-DS-MachineAccountQuota; SpecterOps (RBCD); CVE-2021-42278/42287'
+        Zweck = 'Liest am Domänenobjekt das Attribut ms-DS-MachineAccountQuota - die Anzahl Computerkonten, die ein nicht-privilegierter Benutzer selbst in die Domäne aufnehmen darf. Standard ist 10.'
+        Hintergrund = 'Das Attribut steht am Domänen-(Sam-Domain-)Objekt und gilt für alle authentifizierten Benutzer. Bei Wert > 0 kann jeder Benutzer eigene Computerkonten anlegen (inkl. SPN). Das ist Baustein mehrerer Angriffsketten: Resource-Based Constrained Delegation (das selbst angelegte Konto wird als delegationsberechtigt am Ziel eingetragen) sowie die noPac-Lücke (CVE-2021-42278/42287), bei der ein angelegtes Computerkonto so umbenannt wird, dass es sich als Domänencontroller ausgeben kann.'
+        Beispiel = 'Ein Standardbenutzer legt ein Computerkonto an, trägt es als RBCD-Prinzipal an einem Zielserver ein und übernimmt diesen - ohne jegliche Adminrechte.'
+        Empfehlung = 'ms-DS-MachineAccountQuota auf 0 setzen und das Anlegen von Computerkonten an eine dedizierte, delegierte Gruppe binden. noPac-Patches (November 2021) einspielen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - MS-DS-Machine-Account-Quota attribute'; Url = 'https://learn.microsoft.com/en-us/windows/win32/adschema/a-ms-ds-machineaccountquota' }
+            @{ Titel = 'Shenanigans Labs (Elad Shamir) - Wagging the Dog (MachineAccountQuota + RBCD)'; Url = 'https://shenaniganslabs.io/2019/01/28/Wagging-the-Dog.html' }
+            @{ Titel = 'NVD - CVE-2021-42278 (noPac, sAMAccountName Spoofing)'; Url = 'https://nvd.nist.gov/vuln/detail/CVE-2021-42278' }
+        )
     }
 }
 function Doku ($id) {
@@ -459,13 +486,14 @@ function Doku ($id) {
     $k = $CheckKatalog[$id]
     if ($null -eq $k) { return }
     Merken 'Doku' @{
-        CheckId    = $id
-        DTitel     = $k.Titel
-        Schwere    = $k.Schwere
-        Zweck      = $k.Zweck
-        Beispiel   = $k.Beispiel
-        Empfehlung = $k.Empfehlung
-        Quellen    = $k.Quellen
+        CheckId     = $id
+        DTitel      = $k.Titel
+        Schwere     = $k.Schwere
+        Zweck       = $k.Zweck
+        Hintergrund = $k.Hintergrund   # optional: Technik/Protokoll/Schwachstelle
+        Beispiel    = $k.Beispiel
+        Empfehlung  = $k.Empfehlung
+        Quellen     = $k.Quellen        # String ODER Liste @{ Titel; Url } (klickbare Links)
     }
 }
 ####################################################################################################
@@ -1214,9 +1242,20 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
             'Doku'     {
                 [void]$H.AppendLine('<details class="doku"><summary>Hintergrund &amp; Empfehlung</summary>')
                 [void]$H.AppendLine("<p><span class=""lbl"">Zweck:</span> $(Esc $e.Zweck)</p>")
+                if ("$($e.Hintergrund)".Trim()) {
+                    [void]$H.AppendLine("<p><span class=""lbl"">Technischer Hintergrund:</span> $(Esc $e.Hintergrund)</p>")
+                }
                 [void]$H.AppendLine("<p><span class=""lbl"">Beispiel:</span> $(Esc $e.Beispiel)</p>")
                 [void]$H.AppendLine("<p><span class=""lbl"">Empfehlung:</span> $(Esc $e.Empfehlung)</p>")
-                [void]$H.AppendLine("<p><span class=""lbl"">Quellen:</span> $(Esc $e.Quellen)</p>")
+                # Quellen: String -> Text; Liste @{Titel;Url} -> klickbare, geprueifte Links
+                if ($e.Quellen -is [string]) {
+                    [void]$H.AppendLine("<p><span class=""lbl"">Quellen:</span> $(Esc $e.Quellen)</p>")
+                } else {
+                    $links = @($e.Quellen | ForEach-Object {
+                        "<a href=""$(Esc $_.Url)"" target=""_blank"" rel=""noopener noreferrer"">$(Esc $_.Titel)</a>"
+                    }) -join ' &middot; '
+                    [void]$H.AppendLine("<p><span class=""lbl"">Quellen:</span> $links</p>")
+                }
                 [void]$H.AppendLine('</details>')
             }
             'Titel'    {
