@@ -468,9 +468,20 @@ Describe 'Analyse_V4_6.ps1' {
         It 'Katalog enthaelt Eintraege und alle Pflichtfelder sind gefuellt' {
             $global:CheckKatalog.Count | Should -BeGreaterOrEqual 22
             foreach ($id in $global:CheckKatalog.Keys) {
-                foreach ($feld in 'Titel','Schwere','Zweck','Beispiel','Empfehlung','Quellen') {
+                foreach ($feld in 'Titel','Schwere','Zweck','Beispiel','Empfehlung') {
                     [string]::IsNullOrWhiteSpace($global:CheckKatalog[$id].$feld) |
                         Should -BeFalse -Because "$id.$feld darf nicht leer sein"
+                }
+                # Quellen ist entweder ein String oder eine Liste @{ Titel; Url }
+                $q = $global:CheckKatalog[$id].Quellen
+                if ($q -is [string]) {
+                    [string]::IsNullOrWhiteSpace($q) | Should -BeFalse -Because "$id.Quellen leer"
+                } else {
+                    @($q).Count | Should -BeGreaterThan 0 -Because "$id.Quellen leer"
+                    foreach ($l in @($q)) {
+                        $l.Titel | Should -Not -BeNullOrEmpty -Because "$id Quelle ohne Titel"
+                        $l.Url   | Should -Match '^https?://' -Because "$id Quelle ohne gueltige URL"
+                    }
                 }
             }
         }
@@ -587,6 +598,30 @@ Describe 'Analyse_V4_6.ps1' {
             foreach ($id in 'kerberos','kerberoasting','asrep','delegation','kerb_enc','machine_quota') {
                 $global:CheckKatalog.Keys | Should -Contain $id
             }
+        }
+
+        It 'Kerberos-Eintraege haben technischen Hintergrund und verifizierte Quell-Links' {
+            foreach ($id in 'kerberos','kerberoasting','asrep','delegation','kerb_enc','machine_quota') {
+                $k = $global:CheckKatalog[$id]
+                [string]::IsNullOrWhiteSpace($k.Hintergrund) | Should -BeFalse -Because "$id braucht Hintergrund"
+                $k.Hintergrund.Length | Should -BeGreaterThan 150 -Because "$id Hintergrund zu kurz"
+                @($k.Quellen).Count | Should -BeGreaterOrEqual 2 -Because "$id braucht mehrere Quellen"
+                foreach ($l in @($k.Quellen)) {
+                    $l.Url | Should -Match '^https://' -Because "$id Quelle muss HTTPS-Link sein"
+                    $l.Titel | Should -Not -BeNullOrEmpty
+                }
+            }
+        }
+
+        It 'HTML rendert Technischer Hintergrund und klickbare Quell-Links' {
+            Unterpruefung 'Kerberoasting' 'kerberoasting' { 2werte 'SPN-Konten:' '1' 's' 'Red' }
+            HTML_Report
+            $htmlPfad = [System.IO.Path]::ChangeExtension($global:path, 'html')
+            $html = Get-Content -LiteralPath $htmlPfad -Raw
+            $html | Should -Match 'Technischer Hintergrund:'
+            $html | Should -Match '<a href="https://attack\.mitre\.org/techniques/T1558/003/"'
+            $html | Should -Match 'target="_blank" rel="noopener noreferrer"'
+            Remove-Item $htmlPfad -Force -ErrorAction SilentlyContinue
         }
 
         It 'die Kerberos-Prueffunktionen sind im Skript definiert' {

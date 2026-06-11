@@ -123,6 +123,25 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Doku-Tiefe & verifizierte Quellen" (Juni 2026):**
+- Neues Doku-Feld **`Hintergrund`** (Technik/Protokoll/Schwachstelle), im HTML als
+  „Technischer Hintergrund" gerendert; optional (nur wo gepflegt).
+- **`Quellen`** kann jetzt eine Liste `@{ Titel; Url }` sein → klickbare Links im HTML
+  (`<a target=_blank rel=noopener noreferrer>`); String-Quellen weiterhin unterstützt
+  (Rückwärtskompatibilität für die 22 Inventar-Checks).
+- Die 6 Kerberos-Einträge (Paket A) sind voll ausgebaut: deutlich längerer Zweck,
+  technischer Hintergrund (KDC/TGT/TGS, RC4-HMAC, UAC-Flags mit Hex, S4U/RBCD, noPac)
+  und je 2–3 **live-verifizierte** Quell-Links. Jeder Link wurde per WebFetch geprüft
+  (erreichbar + zitierter Inhalt tatsächlich enthalten): MITRE ATT&CK T1558/.003/.004,
+  Microsoft Learn (SPN, UserAccountControl-Flags, KCD, Encryption Types, MAQ-Attribut),
+  adsecurity.org (Metcalf), Shenanigans Labs (Shamir, RBCD), NVD CVE-2021-42278.
+- Verifikation der LDAP-Filter durch die Microsoft-UAC-Quelle bestätigt: 0x80000
+  (TRUSTED_FOR_DELEGATION), 0x200000 (USE_DES_KEY_ONLY), 0x400000 (DONT_REQ_PREAUTH).
+- Testsuite auf 63 Tests (Hintergrund-Pflicht + HTTPS-Links je Kerberos-Eintrag,
+  HTML rendert „Technischer Hintergrund" + `<a href>`).
+- Offen: Die 22 Inventar-Checks behalten vorerst String-Quellen; gleiche Aufwertung
+  (Hintergrund + verifizierte Links) folgt schrittweise.
+
 **v5.0 Nachtrag „Umlaute & Encoding" (in Paket-A-PR enthalten):**
 - Skript-Datei auf **UTF-8 mit BOM** umgestellt (PS 5.1 liest die Umlaute sonst falsch).
 - Alle 28 Katalogtexte (Zweck/Beispiel/Empfehlung/Titel) nutzen jetzt echte Umlaute statt
