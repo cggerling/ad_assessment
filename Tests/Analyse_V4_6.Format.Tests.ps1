@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Pester-Tests (Pester 5) fuer die Formatierungs-/Layout-Funktionen von Analyse_V4_6.ps1.
@@ -125,6 +125,13 @@ Describe 'Analyse_V4_6.ps1' {
             $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
             $inhalt | Should -Match '\$version = "Vers\. 5\.0"'
             $inhalt | Should -Match 'Version       : 5\.0'
+        }
+
+        It 'ist als UTF-8 mit BOM gespeichert (korrekte Umlaute auch unter PS 5.1)' {
+            $bytes = [System.IO.File]::ReadAllBytes($skriptPfad)
+            $bytes[0] | Should -Be 0xEF
+            $bytes[1] | Should -Be 0xBB
+            $bytes[2] | Should -Be 0xBF
         }
 
         It 'enthaelt die Modul-Vorabpruefung' {
@@ -475,6 +482,14 @@ Describe 'Analyse_V4_6.ps1' {
             }
         }
 
+        It 'Katalog-Texte verwenden echte Umlaute (nicht transliteriert)' {
+            $ae = [char]0x00E4   # ae
+            $global:CheckKatalog['domain_allgemein'].Zweck | Should -Match $ae
+            $global:CheckKatalog['kerberos'].Titel | Should -Match ('Angriffsfl' + $ae + 'chen')
+            # Quellen duerfen nicht faelschlich umgewandelt sein
+            $global:CheckKatalog['domain_allgemein'].Quellen | Should -Match 'Quellen|Microsoft'
+        }
+
         It 'jeder Pruefbereich-Aufruf im Hauptablauf traegt eine -CheckId' {
             $aufrufe = $ast.FindAll({
                 param($a) $a -is [System.Management.Automation.Language.CommandAst] -and
@@ -549,6 +564,7 @@ Describe 'Analyse_V4_6.ps1' {
             $html | Should -Match 'id="chk-admins"'                             # Anker
             $html | Should -Match '<section class="zus">'                        # Zusammenfassung
             $html | Should -Match 'href="#chk-dns"'                             # Sprungmarke
+            $html | Should -Match ([char]0x00E4)                                 # echte Umlaute im HTML
             Remove-Item $htmlPfad -Force -ErrorAction SilentlyContinue
         }
 
