@@ -123,6 +123,19 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Bugfix „srv_chk Zählung" (Juni 2026):**
+- Server Check brach im echten DC-Lauf ab: `op_Subtraction` auf `ADPropertyValueCollection`.
+  Ursache: `(Get-ADComputer … | Where-Object …).count` liefert bei **genau einem** Treffer
+  keine Zahl, sondern eine leere `ADPropertyValueCollection` (AD-Objekte geben bei
+  unbekanntem Member kein `$null`). Die anschließende Subtraktion/Arithmetik scheitert.
+- Fix: alle Zählungen in `srv_chk` auf `@(…).Count` (erzwingt Array → echter Integer),
+  Zähl-Abfragen auf `-Properties OperatingSystem` (statt `*`), die beiden Subtraktionen
+  mit `[int]`-Cast. Regressionstest (case-sensitiv: kein `).count` in `srv_chk`).
+- **Bekanntes latentes Thema:** dasselbe `(...).count`-Muster existiert noch in `clt_chk`,
+  `sys_konten` und einigen `Get-Service`-Zählungen. Diese liefen im Test durch (0 oder ≥2
+  Treffer), können bei genau 1 Treffer aber gleich fehlschlagen → bei Gelegenheit gleich
+  mitziehen.
+
 **v5.0 PR „Doku-Tiefe & verifizierte Quellen" (Juni 2026):**
 - Neues Doku-Feld **`Hintergrund`** (Technik/Protokoll/Schwachstelle), im HTML als
   „Technischer Hintergrund" gerendert; optional (nur wo gepflegt).
