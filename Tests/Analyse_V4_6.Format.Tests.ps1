@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Pester-Tests (Pester 5) fuer die Formatierungs-/Layout-Funktionen von Analyse_V4_6.ps1.
@@ -32,7 +32,8 @@ Describe 'Analyse_V4_6.ps1' {
         ### Formatierungs-Funktionen extrahieren und global definieren #############################
         $zielFunktionen = @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                             'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
-                            'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren',
+                            'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
+                            'Ausgabe','Puffer_leeren',
                             'Merken','Doku','Farbklasse','HTML_Report','JSON_Export')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
@@ -89,7 +90,8 @@ Describe 'Analyse_V4_6.ps1' {
         Remove-Item -LiteralPath $global:path -Force -ErrorAction SilentlyContinue
         foreach ($n in @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                          'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
-                         'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren',
+                         'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
+                         'Ausgabe','Puffer_leeren',
                          'Merken','Doku','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
@@ -123,6 +125,13 @@ Describe 'Analyse_V4_6.ps1' {
             $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
             $inhalt | Should -Match '\$version = "Vers\. 5\.0"'
             $inhalt | Should -Match 'Version       : 5\.0'
+        }
+
+        It 'ist als UTF-8 mit BOM gespeichert (korrekte Umlaute auch unter PS 5.1)' {
+            $bytes = [System.IO.File]::ReadAllBytes($skriptPfad)
+            $bytes[0] | Should -Be 0xEF
+            $bytes[1] | Should -Be 0xBB
+            $bytes[2] | Should -Be 0xBF
         }
 
         It 'enthaelt die Modul-Vorabpruefung' {
@@ -473,6 +482,14 @@ Describe 'Analyse_V4_6.ps1' {
             }
         }
 
+        It 'Katalog-Texte verwenden echte Umlaute (nicht transliteriert)' {
+            $ae = [char]0x00E4   # ae
+            $global:CheckKatalog['domain_allgemein'].Zweck | Should -Match $ae
+            $global:CheckKatalog['kerberos'].Titel | Should -Match ('Angriffsfl' + $ae + 'chen')
+            # Quellen duerfen nicht faelschlich umgewandelt sein
+            $global:CheckKatalog['domain_allgemein'].Quellen | Should -Match 'Quellen|Microsoft'
+        }
+
         It 'jeder Pruefbereich-Aufruf im Hauptablauf traegt eine -CheckId' {
             $aufrufe = $ast.FindAll({
                 param($a) $a -is [System.Management.Automation.Language.CommandAst] -and
@@ -547,6 +564,7 @@ Describe 'Analyse_V4_6.ps1' {
             $html | Should -Match 'id="chk-admins"'                             # Anker
             $html | Should -Match '<section class="zus">'                        # Zusammenfassung
             $html | Should -Match 'href="#chk-dns"'                             # Sprungmarke
+            $html | Should -Match ([char]0x00E4)                                 # echte Umlaute im HTML
             Remove-Item $htmlPfad -Force -ErrorAction SilentlyContinue
         }
 
@@ -560,6 +578,65 @@ Describe 'Analyse_V4_6.ps1' {
             $doku[0].DTitel | Should -Be 'Zertifizierungsstelle(n)'
             $doku[0].Empfehlung | Should -Not -BeNullOrEmpty
             Remove-Item $jsonPfad -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'Paket A (v5.0): Kerberos-Angriffsflaechen' {
+
+        It 'Katalog enthaelt alle Kerberos-Eintraege' {
+            foreach ($id in 'kerberos','kerberoasting','asrep','delegation','kerb_enc','machine_quota') {
+                $global:CheckKatalog.Keys | Should -Contain $id
+            }
+        }
+
+        It 'die Kerberos-Prueffunktionen sind im Skript definiert' {
+            $funktionen = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
+            }, $true) | ForEach-Object { $_.Name }
+            foreach ($fn in 'chk_kerberoasting','chk_asrep','chk_delegation','chk_kerb_enc','chk_machine_quota') {
+                $funktionen | Should -Contain $fn
+            }
+        }
+
+        It 'der Schalter kerbchk steht in der Override-Whitelist' {
+            (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match "'kerbchk'"
+        }
+
+        It 'jede Unterpruefung-CheckId existiert im Katalog' {
+            $aufrufe = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.CommandAst] -and
+                          $a.GetCommandName() -eq 'Unterpruefung'
+            }, $true)
+            $aufrufe.Count | Should -BeGreaterOrEqual 5
+            foreach ($cmd in $aufrufe) {
+                # Positional: [0]=Name der Funktion, [1]=Titel, [2]=CheckId, [3]=Scriptblock
+                $idEl = $cmd.CommandElements[2]
+                $global:CheckKatalog.Keys | Should -Contain $idEl.Value
+            }
+        }
+
+        It 'Unterpruefung erzeugt Titel + Doku und rendert eine Unterueberschrift mit Badge' {
+            Unterpruefung 'Kerberoasting (Konten mit SPN)' 'kerberoasting' {
+                2werte 'Benutzerkonten mit SPN:' '3' 's' 'Red'
+            }
+            $arten = $global:R_Daten | ForEach-Object { $_.Art }
+            $arten | Should -Contain 'Titel'
+            $arten | Should -Contain 'Doku'
+            ($global:R_Daten | Where-Object { $_.Art -eq 'Doku' }).CheckId | Should -Be 'kerberoasting'
+            HTML_Report
+            $htmlPfad = [System.IO.Path]::ChangeExtension($global:path, 'html')
+            $html = Get-Content -LiteralPath $htmlPfad -Raw
+            $html | Should -Match '<h3 id="chk-kerberoasting">'
+            $html | Should -Match 'badge sev-hoch'
+            Remove-Item $htmlPfad -Force -ErrorAction SilentlyContinue
+        }
+
+        It 'Unterpruefung faengt Fehler in der Teilpruefung ab (Bereich laeuft weiter)' {
+            { Unterpruefung 'Testpruefung' 'kerberoasting' { throw 'Simulierter Abfragefehler' } } |
+                Should -Not -Throw
+            $txt = (Get-ReportZeilen) -join ' '
+            $txt | Should -Match 'Teilpruefung uebersprungen'
+            $txt | Should -Match 'Simulierter Abfragefehler'
         }
     }
 

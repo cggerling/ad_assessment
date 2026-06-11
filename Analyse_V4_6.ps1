@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 
 <#
 .SYNOPSIS
@@ -163,6 +163,8 @@ $OrgUni = 1                                      # OU Check aus/ein          (0=
 $caschk = 1                                      # CA Check aus/ein                  (0=nein,1=ja) #
 # Check der einzelnen Domain Controller #        ###################################################
 $DomCon = 1                                      # DC Check aus/ein     (0=nein,1=Teil,2=komplett) #
+# Sicherheit: Kerberos-Angriffsflaechen (v5.0)   ###################################################
+$kerbchk = 1                                     # Kerberos-Checks (Paket A)         (0=nein,1=ja) #
 ####################################################################################################
 # Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
 ################################################################                                   #
@@ -175,7 +177,7 @@ if ($Bereiche) {                                 # Einzelne Schalter per Hashtab
     $schalterListe = @('domoco','schema','censto','sectem','domdcs','loggin','adtchk','dnschk',    #
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
                        'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
-                       'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon')             #
+                       'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk')   #
     foreach ($schalter in $Bereiche.Keys) {                                                        #
         if ($schalterListe -contains $schalter) {                                                  #
             Set-Variable -Name $schalter -Value ([int]$Bereiche[$schalter])                        #
@@ -257,157 +259,199 @@ function Merken ($art, [hashtable]$daten) {                                     
 $CheckKatalog = @{
     'domain_allgemein' = @{
         Titel = 'Domain, Mode, FSMO'; Schwere = 'Info'
-        Zweck = 'Erfasst Grunddaten von Domaene und Forest: Funktionsebenen, FSMO-Rollenverteilung, AD-Papierkorb und das Alter des krbtgt-Kontos. Diese Werte bilden die Basis fuer alle weiteren Bewertungen.'
+        Zweck = 'Erfasst Grunddaten von Domäne und Forest: Funktionsebenen, FSMO-Rollenverteilung, AD-Papierkorb und das Alter des krbtgt-Kontos. Diese Werte bilden die Basis für alle weiteren Bewertungen.'
         Beispiel = 'Eine niedrige Funktionsebene (z. B. Windows Server 2008) verhindert moderne Sicherheitsfunktionen wie AD-Papierkorb oder gMSA. Ein sehr altes krbtgt-Passwort erleichtert Golden-Ticket-Angriffe.'
-        Empfehlung = 'Funktionsebenen auf den hoechsten von allen DCs unterstuetzten Stand heben; AD-Papierkorb aktivieren; krbtgt-Passwort regelmaessig (zweifach im Abstand) zuruecksetzen.'
+        Empfehlung = 'Funktionsebenen auf den höchsten von allen DCs unterstützten Stand heben; AD-Papierkorb aktivieren; krbtgt-Passwort regelmäßig (zweifach im Abstand) zurücksetzen.'
         Quellen = 'Microsoft Learn - Forest/Domain Functional Levels; Microsoft - krbtgt account maintenance'
     }
     'central_store' = @{
         Titel = 'Central Store & Templates'; Schwere = 'Niedrig'
-        Zweck = 'Prueft, ob ein zentraler Speicher (Central Store) fuer GPO-Vorlagen (ADMX/ADML) im SYSVOL existiert und ob Security-Templates vorhanden sind. Der Central Store haelt die GPO-Vorlagen auf allen DCs einheitlich.'
+        Zweck = 'Prüft, ob ein zentraler Speicher (Central Store) für GPO-Vorlagen (ADMX/ADML) im SYSVOL existiert und ob Security-Templates vorhanden sind. Der Central Store hält die GPO-Vorlagen auf allen DCs einheitlich.'
         Beispiel = 'Ohne Central Store ziehen Administratoren die ADMX-Dateien vom lokalen Rechner - je nach Patchstand fehlen dann Richtlinien-Einstellungen oder sind uneinheitlich.'
-        Empfehlung = 'Central Store unter \\<Domaene>\SYSVOL\<Domaene>\Policies\PolicyDefinitions anlegen und aktuell halten.'
+        Empfehlung = 'Central Store unter \\<Domäne>\SYSVOL\<Domäne>\Policies\PolicyDefinitions anlegen und aktuell halten.'
         Quellen = 'Microsoft Learn - Create and manage the Central Store for Group Policy ADMX templates'
     }
     'domain_controller' = @{
-        Titel = 'Domain Controller (Uebersicht)'; Schwere = 'Info'
-        Zweck = 'Listet die Domaenencontroller des Forest mit Betriebssystem, Standort (Site) und Global-Catalog-Rolle auf. Verschafft den Ueberblick, welche DCs vorhanden sind.'
-        Beispiel = 'Ein DC mit nicht mehr unterstuetztem Betriebssystem (z. B. Windows Server 2012 R2 ohne ESU) erhaelt keine Sicherheitsupdates mehr und ist ein bevorzugtes Angriffsziel.'
-        Empfehlung = 'DCs auf unterstuetzten, aktuell gepatchten Betriebssystemen betreiben; nicht mehr benoetigte DCs sauber heruntergraden.'
+        Titel = 'Domain Controller (Übersicht)'; Schwere = 'Info'
+        Zweck = 'Listet die Domänencontroller des Forest mit Betriebssystem, Standort (Site) und Global-Catalog-Rolle auf. Verschafft den Überblick, welche DCs vorhanden sind.'
+        Beispiel = 'Ein DC mit nicht mehr unterstütztem Betriebssystem (z. B. Windows Server 2012 R2 ohne ESU) erhält keine Sicherheitsupdates mehr und ist ein bevorzugtes Angriffsziel.'
+        Empfehlung = 'DCs auf unterstützten, aktuell gepatchten Betriebssystemen betreiben; nicht mehr benötigte DCs sauber heruntergraden.'
         Quellen = 'Microsoft - Windows Server lifecycle'
     }
     'logging' = @{
         Titel = 'Logging auf Domain Controller(n)'; Schwere = 'Mittel'
-        Zweck = 'Prueft Status des Eventlog-Dienstes und die Audit-Richtlinien der DCs. Ohne aktiviertes Auditing fehlen die Spuren, mit denen Angriffe ueberhaupt erkannt werden koennen.'
+        Zweck = 'Prüft Status des Eventlog-Dienstes und die Audit-Richtlinien der DCs. Ohne aktiviertes Auditing fehlen die Spuren, mit denen Angriffe überhaupt erkannt werden können.'
         Beispiel = 'Ist "Audit Kerberos Service Ticket Operations" deaktiviert, bleibt Kerberoasting unsichtbar. Ohne Anmelde-Auditing lassen sich Brute-Force-/Spraying-Angriffe nicht nachweisen.'
-        Empfehlung = 'Advanced Audit Policy gemaess Microsoft-/CIS-Empfehlung konfigurieren (Anmeldungen, Kontenverwaltung, Verzeichnisdienstzugriff); Logs zentral in ein SIEM sammeln.'
+        Empfehlung = 'Advanced Audit Policy gemäß Microsoft-/CIS-Empfehlung konfigurieren (Anmeldungen, Kontenverwaltung, Verzeichnisdienstzugriff); Logs zentral in ein SIEM sammeln.'
         Quellen = 'Microsoft - Audit Policy Recommendations; CIS Microsoft Windows Server Benchmark'
     }
     'trusts' = @{
         Titel = 'AD-Trusts'; Schwere = 'Mittel'
-        Zweck = 'Wertet Vertrauensstellungen zu anderen Domaenen/Forests aus: Richtung, Transitivitaet und SID-Filtering. Trusts sind potenzielle Angriffspfade ueber Domaenengrenzen hinweg.'
-        Beispiel = 'Fehlt bei einem Forest-Trust das SID-Filtering, kann ein Angreifer aus der vertrauten Domaene per SID-History Rechte in der eigenen Domaene erlangen (cross-forest privilege escalation).'
-        Empfehlung = 'Nicht mehr benoetigte Trusts entfernen; SID-Filtering/Quarantine fuer externe Trusts aktiviert lassen; selektive Authentifizierung pruefen.'
+        Zweck = 'Wertet Vertrauensstellungen zu anderen Domänen/Forests aus: Richtung, Transitivität und SID-Filtering. Trusts sind potenzielle Angriffspfade über Domänengrenzen hinweg.'
+        Beispiel = 'Fehlt bei einem Forest-Trust das SID-Filtering, kann ein Angreifer aus der vertrauten Domäne per SID-History Rechte in der eigenen Domäne erlangen (cross-forest privilege escalation).'
+        Empfehlung = 'Nicht mehr benötigte Trusts entfernen; SID-Filtering/Quarantine für externe Trusts aktiviert lassen; selektive Authentifizierung prüfen.'
         Quellen = 'Microsoft - Security considerations for trusts; MITRE ATT&CK T1482 (Domain Trust Discovery)'
     }
     'dns' = @{
         Titel = 'DNS'; Schwere = 'Niedrig'
-        Zweck = 'Prueft DNS-Server-Einstellungen der DCs: Aging/Scavenging (Bereinigung veralteter Eintraege), Forwarder und Zonenkonfiguration. Sauberes DNS ist Voraussetzung fuer Replikation und Anmeldung.'
-        Beispiel = 'Ohne Scavenging sammeln sich veraltete Host-Eintraege an; ein neuer Host kann die IP eines alten Eintrags erhalten und wird dadurch falsch aufgeloest.'
-        Empfehlung = 'Aging/Scavenging mit sinnvollen Intervallen aktivieren; nur vertrauenswuerdige Forwarder konfigurieren; veraltete Zonen bereinigen.'
+        Zweck = 'Prüft DNS-Server-Einstellungen der DCs: Aging/Scavenging (Bereinigung veralteter Einträge), Forwarder und Zonenkonfiguration. Sauberes DNS ist Voraussetzung für Replikation und Anmeldung.'
+        Beispiel = 'Ohne Scavenging sammeln sich veraltete Host-Einträge an; ein neuer Host kann die IP eines alten Eintrags erhalten und wird dadurch falsch aufgelöst.'
+        Empfehlung = 'Aging/Scavenging mit sinnvollen Intervallen aktivieren; nur vertrauenswürdige Forwarder konfigurieren; veraltete Zonen bereinigen.'
         Quellen = 'Microsoft Learn - DNS aging and scavenging'
     }
     'sysvol_health' = @{
         Titel = 'Sysvol Replication & AD-Health'; Schwere = 'Mittel'
-        Zweck = 'Prueft die SYSVOL-Replikation (DFS-R statt des veralteten FRS) und die AD-Replikationsgesundheit. SYSVOL traegt Gruppenrichtlinien und Anmeldeskripte - Replikationsfehler fuehren zu uneinheitlichen Richtlinien.'
-        Beispiel = 'Repliziert SYSVOL noch ueber FRS, ist die Umgebung nicht migriert und auf modernen DCs nicht mehr unterstuetzt; GPO-Aenderungen kommen evtl. nicht auf allen DCs an.'
-        Empfehlung = 'Von FRS auf DFS-R migrieren (falls noch nicht geschehen); Replikationsfehler (repadmin) regelmaessig pruefen und beheben.'
+        Zweck = 'Prüft die SYSVOL-Replikation (DFS-R statt des veralteten FRS) und die AD-Replikationsgesundheit. SYSVOL trägt Gruppenrichtlinien und Anmeldeskripte - Replikationsfehler führen zu uneinheitlichen Richtlinien.'
+        Beispiel = 'Repliziert SYSVOL noch über FRS, ist die Umgebung nicht migriert und auf modernen DCs nicht mehr unterstützt; GPO-Änderungen kommen evtl. nicht auf allen DCs an.'
+        Empfehlung = 'Von FRS auf DFS-R migrieren (falls noch nicht geschehen); Replikationsfehler (repadmin) regelmäßig prüfen und beheben.'
         Quellen = 'Microsoft - SYSVOL Replication Migration (FRS to DFSR)'
     }
     'admins' = @{
         Titel = 'Administratoren und Builtin Benutzer'; Schwere = 'Hoch'
-        Zweck = 'Wertet hochprivilegierte Gruppen aus (Domain/Enterprise/Schema Admins, Administratoren, Builtin-Konten, Konten mit AdminCount=1). Diese Konten sind das primaere Ziel jedes Angreifers.'
-        Beispiel = 'Ein vergessenes Dienstkonto in "Domain Admins" mit schwachem Passwort genuegt, um die gesamte Domaene zu uebernehmen. Je mehr Mitglieder, desto groesser die Angriffsflaeche.'
-        Empfehlung = 'Mitgliederzahl privilegierter Gruppen minimieren (Tier-0-Modell); Enterprise/Schema Admins im Normalbetrieb leer halten; dedizierte Admin-Konten, kein Tagesgeschaeft mit Admin-Rechten.'
+        Zweck = 'Wertet hochprivilegierte Gruppen aus (Domain/Enterprise/Schema Admins, Administratoren, Builtin-Konten, Konten mit AdminCount=1). Diese Konten sind das primäre Ziel jedes Angreifers.'
+        Beispiel = 'Ein vergessenes Dienstkonto in "Domain Admins" mit schwachem Passwort genügt, um die gesamte Domäne zu übernehmen. Je mehr Mitglieder, desto größer die Angriffsfläche.'
+        Empfehlung = 'Mitgliederzahl privilegierter Gruppen minimieren (Tier-0-Modell); Enterprise/Schema Admins im Normalbetrieb leer halten; dedizierte Admin-Konten, kein Tagesgeschäft mit Admin-Rechten.'
         Quellen = 'Microsoft - Securing Privileged Access; Microsoft - Protected Accounts and Groups in AD'
     }
     'benutzer' = @{
         Titel = 'Benutzer und Benutzer Accounts'; Schwere = 'Mittel'
         Zweck = 'Untersucht Benutzerkonten auf inaktive, gesperrte und falsch platzierte Konten (Standard-OU "Users"). Verwaiste Konten sind unbeaufsichtigte Einfallstore.'
-        Beispiel = 'Ein seit zwei Jahren inaktives, aber aktiviertes Konto eines ausgeschiedenen Mitarbeiters laesst sich uebernehmen, ohne dass es auffaellt.'
-        Empfehlung = 'Inaktive Konten deaktivieren und nach Frist loeschen; Konten in passende OUs strukturieren; Joiner-/Mover-/Leaver-Prozess etablieren.'
+        Beispiel = 'Ein seit zwei Jahren inaktives, aber aktiviertes Konto eines ausgeschiedenen Mitarbeiters lässt sich übernehmen, ohne dass es auffällt.'
+        Empfehlung = 'Inaktive Konten deaktivieren und nach Frist löschen; Konten in passende OUs strukturieren; Joiner-/Mover-/Leaver-Prozess etablieren.'
         Quellen = 'Microsoft - Active Directory account management best practices'
     }
     'computerkonten' = @{
         Titel = 'Computerkonten'; Schwere = 'Info'
-        Zweck = 'Erfasst die Computerkonten der Domaene. Liefert den Bestand und hilft, verwaiste oder veraltete Maschinenkonten zu erkennen.'
-        Beispiel = 'Ein Computerkonto ohne juengste Anmeldung deutet auf ein ausgemustertes Geraet hin, dessen Konto noch missbraucht werden koennte.'
-        Empfehlung = 'Veraltete Computerkonten regelmaessig identifizieren und entfernen.'
+        Zweck = 'Erfasst die Computerkonten der Domäne. Liefert den Bestand und hilft, verwaiste oder veraltete Maschinenkonten zu erkennen.'
+        Beispiel = 'Ein Computerkonto ohne jüngste Anmeldung deutet auf ein ausgemustertes Gerät hin, dessen Konto noch missbraucht werden könnte.'
+        Empfehlung = 'Veraltete Computerkonten regelmäßig identifizieren und entfernen.'
         Quellen = 'Microsoft - Active Directory maintenance best practices'
     }
     'clients' = @{
         Titel = 'Client Check'; Schwere = 'Niedrig'
-        Zweck = 'Listet Client-Betriebssysteme und prueft, ob sie noch vom Hersteller unterstuetzt werden. Nicht unterstuetzte Systeme erhalten keine Sicherheitsupdates.'
-        Beispiel = 'Ein verbliebenes Windows 7 oder ausgelaufenes Windows 10 ist ueber bekannte, ungepatchte Luecken angreifbar und kann als Sprungbrett dienen.'
-        Empfehlung = 'Nicht unterstuetzte Clients ausmustern oder isolieren; Patch-Management sicherstellen.'
+        Zweck = 'Listet Client-Betriebssysteme und prüft, ob sie noch vom Hersteller unterstützt werden. Nicht unterstützte Systeme erhalten keine Sicherheitsupdates.'
+        Beispiel = 'Ein verbliebenes Windows 7 oder ausgelaufenes Windows 10 ist über bekannte, ungepatchte Lücken angreifbar und kann als Sprungbrett dienen.'
+        Empfehlung = 'Nicht unterstützte Clients ausmustern oder isolieren; Patch-Management sicherstellen.'
         Quellen = 'Microsoft - Windows lifecycle fact sheet'
     }
     'server' = @{
         Titel = 'Server Check'; Schwere = 'Niedrig'
-        Zweck = 'Listet Server-Betriebssysteme und deren Support-Status. Wie bei Clients sind nicht unterstuetzte Server ein erhoehtes Risiko.'
-        Beispiel = 'Ein Windows Server 2008 R2 ohne ESU ist dauerhaft verwundbar; faellt er, koennen darauf gespeicherte Anmeldedaten den Angriff ausweiten.'
-        Empfehlung = 'Server auf unterstuetzte Versionen heben; Altsysteme isolieren; Patch-Stand ueberwachen.'
+        Zweck = 'Listet Server-Betriebssysteme und deren Support-Status. Wie bei Clients sind nicht unterstützte Server ein erhöhtes Risiko.'
+        Beispiel = 'Ein Windows Server 2008 R2 ohne ESU ist dauerhaft verwundbar; fällt er, können darauf gespeicherte Anmeldedaten den Angriff ausweiten.'
+        Empfehlung = 'Server auf unterstützte Versionen heben; Altsysteme isolieren; Patch-Stand überwachen.'
         Quellen = 'Microsoft - Windows Server lifecycle'
     }
     'nicht_windows' = @{
         Titel = 'Nicht-Windows-Systeme'; Schwere = 'Info'
-        Zweck = 'Erfasst in der Domaene registrierte Nicht-Windows-Systeme. Schafft Transparenz ueber heterogene Geraete (Linux, Appliances), die ebenfalls Konten besitzen.'
-        Beispiel = 'Ein an die Domaene angebundenes Linux-System mit veralteter Konfiguration kann eigene Schwachstellen einbringen.'
-        Empfehlung = 'Nicht-Windows-Beitritte dokumentieren und in das Patch-/Haertungskonzept einbeziehen.'
-        Quellen = 'Allgemeine Haertungs-Empfehlungen (herstellerabhaengig)'
+        Zweck = 'Erfasst in der Domäne registrierte Nicht-Windows-Systeme. Schafft Transparenz über heterogene Geräte (Linux, Appliances), die ebenfalls Konten besitzen.'
+        Beispiel = 'Ein an die Domäne angebundenes Linux-System mit veralteter Konfiguration kann eigene Schwachstellen einbringen.'
+        Empfehlung = 'Nicht-Windows-Beitritte dokumentieren und in das Patch-/Härtungskonzept einbeziehen.'
+        Quellen = 'Allgemeine Härtungs-Empfehlungen (herstellerabhängig)'
     }
     'ad_gruppen' = @{
         Titel = 'AD-Gruppen'; Schwere = 'Niedrig'
-        Zweck = 'Wertet AD-Gruppen aus (Anzahl, Typ, leere oder verschachtelte Gruppen). Unuebersichtliche Gruppenstrukturen fuehren zu schleichender Rechteanhaeufung.'
+        Zweck = 'Wertet AD-Gruppen aus (Anzahl, Typ, leere oder verschachtelte Gruppen). Unübersichtliche Gruppenstrukturen führen zu schleichender Rechteanhäufung.'
         Beispiel = 'Tief verschachtelte Gruppen verschleiern, wer am Ende welche Rechte hat - so entstehen ungewollte Berechtigungen.'
-        Empfehlung = 'Gruppenmodell aufraeumen (z. B. AGDLP), leere/verwaiste Gruppen entfernen, Verschachtelung begrenzen, regelmaessig rezertifizieren.'
+        Empfehlung = 'Gruppenmodell aufräumen (z. B. AGDLP), leere/verwaiste Gruppen entfernen, Verschachtelung begrenzen, regelmäßig rezertifizieren.'
         Quellen = 'Microsoft - Group scope and nesting best practices'
     }
     'gpos' = @{
         Titel = 'GPOs'; Schwere = 'Mittel'
-        Zweck = 'Erfasst die Gruppenrichtlinienobjekte (GPOs), u. a. nicht verknuepfte oder leere GPOs und die Domaenen-Standardrichtlinien. GPOs steuern zentrale Sicherheitseinstellungen.'
-        Beispiel = 'Eine GPO, deren Bearbeitungsrecht an eine breite Gruppe vergeben ist, erlaubt Angreifern, ueber die GPO Code auf vielen Systemen auszufuehren.'
-        Empfehlung = 'Nicht verknuepfte/leere GPOs entfernen; GPO-Bearbeitungsrechte streng begrenzen; Aenderungen versionieren und dokumentieren.'
+        Zweck = 'Erfasst die Gruppenrichtlinienobjekte (GPOs), u. a. nicht verknüpfte oder leere GPOs und die Domänen-Standardrichtlinien. GPOs steuern zentrale Sicherheitseinstellungen.'
+        Beispiel = 'Eine GPO, deren Bearbeitungsrecht an eine breite Gruppe vergeben ist, erlaubt Angreifern, über die GPO Code auf vielen Systemen auszuführen.'
+        Empfehlung = 'Nicht verknüpfte/leere GPOs entfernen; GPO-Bearbeitungsrechte streng begrenzen; Änderungen versionieren und dokumentieren.'
         Quellen = 'Microsoft - Group Policy security best practices; MITRE ATT&CK T1484 (Domain Policy Modification)'
     }
     'ddp_password' = @{
         Titel = 'dDP Password Settings'; Schwere = 'Hoch'
-        Zweck = 'Prueft die Default Domain Password Policy (Mindestlaenge, Komplexitaet, Historie, Sperrschwelle). Diese Richtlinie bestimmt die Grundsicherheit aller Domaenenpasswoerter.'
-        Beispiel = 'Eine Mindestlaenge von 7 Zeichen ohne Sperrschwelle ermoeglicht praktikable Brute-Force- und Password-Spraying-Angriffe.'
-        Empfehlung = 'Mindestens 14 Zeichen, Sperrschwelle setzen, gegen bekannte/kompromittierte Passwoerter pruefen (z. B. Azure AD Password Protection oder gleichwertig).'
+        Zweck = 'Prüft die Default Domain Password Policy (Mindestlänge, Komplexität, Historie, Sperrschwelle). Diese Richtlinie bestimmt die Grundsicherheit aller Domänenpasswörter.'
+        Beispiel = 'Eine Mindestlänge von 7 Zeichen ohne Sperrschwelle ermöglicht praktikable Brute-Force- und Password-Spraying-Angriffe.'
+        Empfehlung = 'Mindestens 14 Zeichen, Sperrschwelle setzen, gegen bekannte/kompromittierte Passwörter prüfen (z. B. Azure AD Password Protection oder gleichwertig).'
         Quellen = 'Microsoft - Password policy recommendations; NIST SP 800-63B; CIS Benchmark'
     }
     'fgpp' = @{
         Titel = 'Fine Grained Password Policies'; Schwere = 'Mittel'
-        Zweck = 'Wertet Fine-Grained Password Policies (PSOs) aus, mit denen abweichende Passwortrichtlinien fuer einzelne Gruppen/Konten gelten - wichtig vor allem fuer privilegierte und Dienstkonten.'
-        Beispiel = 'Fehlt eine strengere Richtlinie fuer Administratoren oder Dienstkonten, gilt fuer sie nur die oft schwaechere Standardrichtlinie.'
-        Empfehlung = 'Fuer privilegierte Konten und Dienstkonten strengere PSOs definieren (laenger, haeufigerer Wechsel bzw. gMSA).'
+        Zweck = 'Wertet Fine-Grained Password Policies (PSOs) aus, mit denen abweichende Passwortrichtlinien für einzelne Gruppen/Konten gelten - wichtig vor allem für privilegierte und Dienstkonten.'
+        Beispiel = 'Fehlt eine strengere Richtlinie für Administratoren oder Dienstkonten, gilt für sie nur die oft schwächere Standardrichtlinie.'
+        Empfehlung = 'Für privilegierte Konten und Dienstkonten strengere PSOs definieren (länger, häufigerer Wechsel bzw. gMSA).'
         Quellen = 'Microsoft Learn - Fine-Grained Password Policies'
     }
     'user_vs_pw' = @{
         Titel = 'User vs Password Policies'; Schwere = 'Mittel'
-        Zweck = 'Gleicht Benutzerkonten gegen passwortbezogene Risikomerkmale ab, u. a. "Passwort laeuft nie ab" und "Passwort nicht erforderlich". Solche Konten unterlaufen die Passwortrichtlinie.'
+        Zweck = 'Gleicht Benutzerkonten gegen passwortbezogene Risikomerkmale ab, u. a. "Passwort läuft nie ab" und "Passwort nicht erforderlich". Solche Konten unterlaufen die Passwortrichtlinie.'
         Beispiel = 'Ein Konto mit "Password never expires" und schwachem Passwort bleibt dauerhaft angreifbar; "Password not required" erlaubt im Extremfall ein leeres Passwort.'
-        Empfehlung = 'Flags PASSWD_NOTREQD und DONT_EXPIRE_PASSWORD pruefen und entfernen (Ausnahmen nur fuer gMSA/begruendete Faelle).'
+        Empfehlung = 'Flags PASSWD_NOTREQD und DONT_EXPIRE_PASSWORD prüfen und entfernen (Ausnahmen nur für gMSA/begründete Fälle).'
         Quellen = 'Microsoft - userAccountControl flags; Microsoft - account security best practices'
     }
     'ous' = @{
         Titel = 'Organisation Units'; Schwere = 'Info'
-        Zweck = 'Stellt die OU-Struktur dar und prueft optional den Schutz vor versehentlichem Loeschen. Eine saubere OU-Struktur ist Basis fuer gezielte GPO-Verknuepfung und Delegation.'
-        Beispiel = 'Eine flache oder chaotische OU-Struktur erschwert das Tiering und fuehrt dazu, dass GPOs zu breit greifen.'
-        Empfehlung = 'OU-Struktur an Verwaltung/Tiering ausrichten; Schutz vor versehentlichem Loeschen aktivieren; Delegationen dokumentieren.'
+        Zweck = 'Stellt die OU-Struktur dar und prüft optional den Schutz vor versehentlichem Löschen. Eine saubere OU-Struktur ist Basis für gezielte GPO-Verknüpfung und Delegation.'
+        Beispiel = 'Eine flache oder chaotische OU-Struktur erschwert das Tiering und führt dazu, dass GPOs zu breit greifen.'
+        Empfehlung = 'OU-Struktur an Verwaltung/Tiering ausrichten; Schutz vor versehentlichem Löschen aktivieren; Delegationen dokumentieren.'
         Quellen = 'Microsoft - Designing the OU structure'
     }
     'msa' = @{
         Titel = 'Managed Service Accounts (MSA/gMSA)'; Schwere = 'Niedrig'
-        Zweck = 'Prueft (group) Managed Service Accounts und den KDS-Root-Key. (g)MSA bieten automatisch verwaltete, sehr lange Passwoerter und sind die sichere Alternative zu klassischen Dienstkonten.'
-        Beispiel = 'Laufen Dienste noch unter klassischen Konten mit fixem Passwort und SPN, sind sie Kerberoasting-faehig - ein gMSA waere dagegen praktisch nicht knackbar.'
-        Empfehlung = 'Dienste auf gMSA umstellen; KDS-Root-Key bereitstellen; klassische Dienstkonten abloesen.'
+        Zweck = 'Prüft (group) Managed Service Accounts und den KDS-Root-Key. (g)MSA bieten automatisch verwaltete, sehr lange Passwörter und sind die sichere Alternative zu klassischen Dienstkonten.'
+        Beispiel = 'Laufen Dienste noch unter klassischen Konten mit fixem Passwort und SPN, sind sie Kerberoasting-fähig - ein gMSA wäre dagegen praktisch nicht knackbar.'
+        Empfehlung = 'Dienste auf gMSA umstellen; KDS-Root-Key bereitstellen; klassische Dienstkonten ablösen.'
         Quellen = 'Microsoft Learn - Group Managed Service Accounts Overview'
     }
     'ca' = @{
         Titel = 'Zertifizierungsstelle(n)'; Schwere = 'Mittel'
         Zweck = 'Erfasst die Zertifizierungsstellen (Root/Sub-CA) der Umgebung (AD CS). Die PKI ist sicherheitskritisch: Wer Zertifikate ausstellen kann, kann sich als beliebiger Benutzer ausgeben.'
-        Beispiel = 'Eine falsch konfigurierte Vorlage kann es jedem Benutzer erlauben, ein Anmeldezertifikat fuer einen Administrator zu beantragen (ESC1) - die Detailpruefung erfolgt im AD-CS-Sicherheitscheck.'
-        Empfehlung = 'CA-Rollen und Vorlagen regelmaessig auf Fehlkonfigurationen pruefen (ESC1-ESC8); Ausstellungsrechte streng begrenzen.'
+        Beispiel = 'Eine falsch konfigurierte Vorlage kann es jedem Benutzer erlauben, ein Anmeldezertifikat für einen Administrator zu beantragen (ESC1) - die Detailprüfung erfolgt im AD-CS-Sicherheitscheck.'
+        Empfehlung = 'CA-Rollen und Vorlagen regelmäßig auf Fehlkonfigurationen prüfen (ESC1-ESC8); Ausstellungsrechte streng begrenzen.'
         Quellen = 'SpecterOps - Certified Pre-Owned; Microsoft - AD CS security'
     }
     'dc_detail' = @{
-        Titel = 'Domain Controller (Detailpruefung)'; Schwere = 'Mittel'
-        Zweck = 'Fuehrt pro Domaenencontroller Detailpruefungen durch (Dienste, Rollen, Features, LDAPS, NTLM, SMB1, BitLocker, ExecutionPolicy). Der DC ist das Herz der Domaene; seine Haertung ist entscheidend.'
-        Beispiel = 'Ist SMB1 auf einem DC noch aktiv, ist er ueber laengst bekannte Luecken (z. B. EternalBlue) angreifbar; fehlendes LDAPS erlaubt das Mitlesen von Verzeichnisanfragen.'
-        Empfehlung = 'SMB1 entfernen, LDAPS/LDAP-Signing erzwingen, NTLM einschraenken, DCs nach CIS-/Microsoft-Baseline haerten.'
+        Titel = 'Domain Controller (Detailprüfung)'; Schwere = 'Mittel'
+        Zweck = 'Führt pro Domänencontroller Detailprüfungen durch (Dienste, Rollen, Features, LDAPS, NTLM, SMB1, BitLocker, ExecutionPolicy). Der DC ist das Herz der Domäne; seine Härtung ist entscheidend.'
+        Beispiel = 'Ist SMB1 auf einem DC noch aktiv, ist er über längst bekannte Lücken (z. B. EternalBlue) angreifbar; fehlendes LDAPS erlaubt das Mitlesen von Verzeichnisanfragen.'
+        Empfehlung = 'SMB1 entfernen, LDAPS/LDAP-Signing erzwingen, NTLM einschränken, DCs nach CIS-/Microsoft-Baseline härten.'
         Quellen = 'Microsoft Security Baselines; CIS Microsoft Windows Server Benchmark'
+    }
+    'kerberos' = @{
+        Titel = 'Kerberos - Angriffsflächen'; Schwere = 'Hoch'
+        Zweck = 'Bündelt die wichtigsten Kerberos-bezogenen Angriffsflächen einer AD-Umgebung: angreifbare Dienstkonten, fehlende Vorauthentifizierung, missbrauchbare Delegation, schwache Verschlüsselung und das Computerkonten-Kontingent.'
+        Beispiel = 'Diese Schwachstellen erlauben es einem normalen Domänenbenutzer häufig, ohne Adminrechte an privilegierte Anmeldedaten zu gelangen - ein klassischer Einstieg in die Domänenübernahme.'
+        Empfehlung = 'Die einzelnen Teilprüfungen abarbeiten; Dienstkonten auf gMSA umstellen, AES erzwingen, Delegation minimieren und das Kontingent auf 0 setzen.'
+        Quellen = 'MITRE ATT&CK TA0006 (Credential Access); Microsoft - Securing Privileged Access; adsecurity.org'
+    }
+    'kerberoasting' = @{
+        Titel = 'Kerberoasting (Konten mit SPN)'; Schwere = 'Hoch'
+        Zweck = 'Listet aktivierte Benutzerkonten (keine Computer) mit gesetztem servicePrincipalName auf. Solche Konten geben Kerberos-Service-Tickets aus, deren Verschlüsselung vom Kontopasswort abgeleitet ist und offline geknackt werden kann.'
+        Beispiel = 'Jeder Domänenbenutzer fordert für ein SPN-Konto ein Service-Ticket an und knackt es offline (z. B. Hashcat). Da das Knacken ohne DC-Kontakt läuft, bleibt es unauffällig. Steckt das Konto in Domain Admins, ist die Domäne kompromittiert.'
+        Empfehlung = 'Dienstkonten auf (group) Managed Service Accounts umstellen (automatische 120-Zeichen-Passwörter); sonst Passwörter >= 25 Zeichen, AES erzwingen, privilegierte Konten nie mit SPN betreiben.'
+        Quellen = 'MITRE ATT&CK T1558.003; Microsoft - Service Principal Names; adsecurity.org'
+    }
+    'asrep' = @{
+        Titel = 'AS-REP Roasting (ohne Vorauthentifizierung)'; Schwere = 'Hoch'
+        Zweck = 'Findet Konten mit gesetztem Flag DONT_REQ_PREAUTH (Kerberos-Vorauthentifizierung nicht erforderlich). Für solche Konten kann ein Angreifer ohne jede Anmeldung ein verschlüsseltes Material anfordern und offline knacken.'
+        Beispiel = 'Ein Angreifer fragt für ein Konto ohne Pre-Auth einen AS-REP an und knackt das daraus ableitbare Passwort-Hash offline - ganz ohne gültige Anmeldedaten in der Domäne.'
+        Empfehlung = 'Flag "Kerberos-Preauthentifizierung nicht erforderlich" entfernen, wo immer möglich; betroffene Konten mit starken Passwörtern versehen bzw. deaktivieren.'
+        Quellen = 'MITRE ATT&CK T1558.004; Microsoft - userAccountControl flags (DONT_REQ_PREAUTH)'
+    }
+    'delegation' = @{
+        Titel = 'Delegation (Unconstrained / Constrained / RBCD)'; Schwere = 'Hoch'
+        Zweck = 'Prüft Konten/Computer mit Kerberos-Delegationsrechten: uneingeschränkt (TrustedForDelegation), eingeschränkt (msDS-AllowedToDelegateTo) und ressourcenbasiert (msDS-AllowedToActOnBehalfOfOtherIdentity). Domänencontroller werden ausgenommen.'
+        Beispiel = 'Ein Computer mit uneingeschränkter Delegation kann Kerberos-Tickets beliebiger Benutzer (inkl. Domain Admins) zwischenspeichern und missbrauchen. RBCD-Einträge sind ein beliebter moderner Eskalationspfad.'
+        Empfehlung = 'Uneingeschränkte Delegation vermeiden; auf eingeschränkte Delegation (am besten mit Protocol Transition aus) umstellen; sensible Konten als "Konto ist vertraulich und kann nicht delegiert werden" markieren bzw. in Protected Users aufnehmen.'
+        Quellen = 'MITRE ATT&CK T1558; SpecterOps - Delegation/RBCD; Microsoft - Kerberos constrained delegation'
+    }
+    'kerb_enc' = @{
+        Titel = 'Schwache Kerberos-Verschlüsselung'; Schwere = 'Mittel'
+        Zweck = 'Findet Konten, die ausschließlich DES verwenden (UAC-Flag UseDESKeyOnly). DES (und ebenso RC4) gelten als gebrochen bzw. veraltet und erleichtern das Knacken von Tickets erheblich.'
+        Beispiel = 'Ein Dienstkonto mit erzwungenem DES gibt Tickets aus, die mit heutiger Hardware sehr schnell zu brechen sind - ein bevorzugtes Kerberoasting-Ziel.'
+        Empfehlung = 'UseDESKeyOnly entfernen; AES (msDS-SupportedEncryptionTypes auf AES128/AES256) erzwingen und RC4 schrittweise abschalten.'
+        Quellen = 'Microsoft - Network security: Configure encryption types allowed for Kerberos; MITRE ATT&CK T1558'
+    }
+    'machine_quota' = @{
+        Titel = 'Computerkonten-Kontingent (MachineAccountQuota)'; Schwere = 'Hoch'
+        Zweck = 'Liest am Domänenobjekt das Attribut ms-DS-MachineAccountQuota aus - die Anzahl Computerkonten, die ein nicht-privilegierter Benutzer selbst in die Domäne aufnehmen darf. Standard ist 10.'
+        Beispiel = 'Mit jedem gültigen Benutzerkonto kann ein Angreifer bei Wert > 0 ein eigenes Computerkonto anlegen und dieses für Resource-Based Constrained Delegation oder die noPac-Lücke (CVE-2021-42278/42287) zur Rechteausweitung missbrauchen.'
+        Empfehlung = 'Wert auf 0 setzen und das Anlegen von Computerkonten an eine dedizierte, delegierte Gruppe binden.'
+        Quellen = 'Microsoft Learn - ms-DS-MachineAccountQuota; SpecterOps (RBCD); CVE-2021-42278/42287'
     }
 }
 function Doku ($id) {
@@ -1034,6 +1078,24 @@ function Pruefbereich ($titel,[scriptblock]$aktion,$CheckId) {
     }
     finally { Puffer_leeren }                    # Bereich fertig -> Puffer in die Datei schreiben #
 }
+function Unterpruefung ($titel,$checkid,[scriptblock]$aktion) {
+    ### Legende ####################################################################################
+    # Teilpruefung innerhalb eines Bereichs (z.B. einzelner Kerberos-Check).                       #
+    # $titel   = Unterueberschrift (Bereichstitel -> h3)                                           #
+    # $checkid = Katalog-ID; emittiert direkt danach die Begruendung (Doku)                        #
+    # $aktion  = Scriptblock mit der eigentlichen Pruefung; eigener try/catch, damit ein           #
+    #            Fehler nur diese Teilpruefung ueberspringt, nicht den ganzen Bereich.             #
+    ################################################################################################
+    Bereichstitel $titel
+    if ($checkid) { Doku $checkid }
+    Leerzeile
+    try { & $aktion }
+    catch {
+        neu_text 0 '!' "Hinweis: Teilpruefung uebersprungen" `
+            "Meldung: $($_.Exception.Message). Die uebrigen Pruefungen dieses Bereichs laufen weiter."
+    }
+    Leerzeile
+}
 ####################################################################################################
 # Export-Funktionen: HTML-Report (im Stil von water.css) und JSON-Export                           #
 ####################################################################################################
@@ -1050,7 +1112,11 @@ function HTML_Report {
     # Erzeugt aus den gesammelten Ereignissen ($R_Daten) einen eigenstaendigen HTML-Report.
     # Styling: kompaktes, water.css-inspiriertes CSS (eingebettet, offline-faehig,
     # hell/dunkel folgt automatisch der Systemeinstellung).
-    function Esc ($t) { [System.Net.WebUtility]::HtmlEncode("$t") }
+    function Esc ($t) {
+        # Nur HTML-kritische Zeichen escapen; Umlaute bleiben als echtes UTF-8 erhalten
+        # (Datei ist UTF-8, charset=utf-8). Reihenfolge: & zuerst.
+        "$t" -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' -replace '"', '&quot;'
+    }
     $ziel = [System.IO.Path]::ChangeExtension($path, 'html')
     $zielverz = Split-Path -Parent $ziel
     if (!(Test-Path $zielverz)) { New-Item -Path $zielverz -ItemType Directory | Out-Null }
@@ -1139,7 +1205,8 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
                 # Folgt direkt ein Doku-Ereignis, bekommt die Ueberschrift Anker-ID und Severity-Badge.
                 $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
                 if ($next -and $next.Art -eq 'Doku') {
-                    [void]$H.AppendLine("<h2 id=""chk-$($next.CheckId)"">$(Esc $e.Titel) <span class=""badge $(SevKlasse $next.Schwere)"">$(Esc $next.Schwere)</span></h2>")
+                    # Katalog-Titel (mit Umlauten) statt des ASCII-Bereichstitels verwenden.
+                    [void]$H.AppendLine("<h2 id=""chk-$($next.CheckId)"">$(Esc $next.DTitel) <span class=""badge $(SevKlasse $next.Schwere)"">$(Esc $next.Schwere)</span></h2>")
                 } else {
                     [void]$H.AppendLine("<h2>$(Esc $e.Titel)</h2>")
                 }
@@ -1152,7 +1219,17 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
                 [void]$H.AppendLine("<p><span class=""lbl"">Quellen:</span> $(Esc $e.Quellen)</p>")
                 [void]$H.AppendLine('</details>')
             }
-            'Titel'    { [void]$H.AppendLine("<h3>$(Esc $e.Text)</h3>") }
+            'Titel'    {
+                # Wie bei 'Bereich': folgt ein Doku-Ereignis, bekommt die Unterueberschrift
+                # Anker-ID und Severity-Badge (fuer Unterpruefungen der Sicherheits-Pakete).
+                $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
+                if ($next -and $next.Art -eq 'Doku') {
+                    # Katalog-Titel (mit Umlauten) statt des ASCII-Untertitels verwenden.
+                    [void]$H.AppendLine("<h3 id=""chk-$($next.CheckId)"">$(Esc $next.DTitel) <span class=""badge $(SevKlasse $next.Schwere)"">$(Esc $next.Schwere)</span></h3>")
+                } else {
+                    [void]$H.AppendLine("<h3>$(Esc $e.Text)</h3>")
+                }
+            }
             'Subtitel' { [void]$H.AppendLine("<h4>$(Esc $e.Text)</h4>") }
             'Wert'     {
                 if ($offen -ne 'kv') {
@@ -1191,7 +1268,8 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
     [void]$H.AppendLine("<footer><p class=""meta"">$(Esc $madeby) &middot; $(Esc $firma)</p></footer>")
     [void]$H.AppendLine('</body>')
     [void]$H.AppendLine('</html>')
-    [System.IO.File]::WriteAllText($ziel, $H.ToString(), (New-Object System.Text.UTF8Encoding($false)))
+    # Mit BOM schreiben, damit Umlaute auch ausserhalb des Browsers (Editoren, PS 5.1) stimmen.
+    [System.IO.File]::WriteAllText($ziel, $H.ToString(), (New-Object System.Text.UTF8Encoding($true)))
     if ($A_Con -eq 1) { Write-Host "HTML-Report : $ziel" -ForegroundColor $F_Ue_Schrift }
 }
 function JSON_Export {
@@ -3677,7 +3755,79 @@ function AD_Controller {
         dcprog $dcon
         dcdienste $dcon
         }
-      }   
+      }
+}
+####################################################################################################
+# Sicherheit Paket A: Kerberos-Angriffsflaechen (read-only LDAP-Abfragen)                          #
+####################################################################################################
+function chk_kerberoasting {
+    # Aktivierte Benutzerkonten (keine Computer) mit SPN -> Kerberoasting-faehig. krbtgt ausgenommen.
+    $spn = @(Get-ADUser -LDAPFilter '(&(servicePrincipalName=*)(!userAccountControl:1.2.840.113556.1.4.803:=2))' `
+                -Properties servicePrincipalName, adminCount |
+             Where-Object { $_.SamAccountName -ne 'krbtgt' })
+    $anz = $spn.Count
+    if ($anz -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Benutzerkonten mit SPN:" "$anz" "s" $fa
+    $priv = @($spn | Where-Object { $_.adminCount -eq 1 })
+    if ($priv.Count -gt 0) { 2werte "davon privilegiert (AdminCount=1):" "$($priv.Count)" "s" $F_Fehler }
+    if ($anz -gt 0) {
+        Leerzeile
+        Bereichstitel "Betroffene Konten:" "s"
+        Leerzeile
+        foreach ($u in $spn) {
+            $kennz = if ($u.adminCount -eq 1) { 'privilegiert!' } else { 'Standardkonto' }
+            $cfa   = if ($u.adminCount -eq 1) { $F_Fehler } else { $F_Text }
+            2werte " $($u.SamAccountName)" $kennz "s" $cfa
+        }
+    }
+}
+function chk_asrep {
+    # Konten ohne Kerberos-Vorauthentifizierung (DONT_REQ_PREAUTH) -> AS-REP-Roasting-faehig.
+    $asr = @(Get-ADUser -LDAPFilter '(userAccountControl:1.2.840.113556.1.4.803:=4194304)' `
+                -Properties userAccountControl)
+    $anz = $asr.Count
+    if ($anz -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Konten ohne Vorauthentifizierung:" "$anz" "s" $fa
+    if ($anz -gt 0) {
+        Leerzeile
+        foreach ($u in $asr) { 2werte " $($u.SamAccountName)" "DONT_REQ_PREAUTH" "s" $F_Fehler }
+    }
+}
+function chk_delegation {
+    # DC-Namen zum Ausschluss (DCs haben legitim uneingeschraenkte Delegation).
+    $dcNamen = @($DCs | ForEach-Object { $_.Name })
+    # 1) Uneingeschraenkte Delegation (TRUSTED_FOR_DELEGATION = 0x80000 = 524288)
+    $uncon = @(Get-ADObject -LDAPFilter '(userAccountControl:1.2.840.113556.1.4.803:=524288)' `
+                -Properties samAccountName | Where-Object { $dcNamen -notcontains ($_.samAccountName -replace '\$$','') })
+    if ($uncon.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Uneingeschraenkte Delegation (ohne DCs):" "$($uncon.Count)" "s" $fa
+    foreach ($o in $uncon) { 2werte " $($o.samAccountName)" "TrustedForDelegation" "s" $F_Fehler }
+    # 2) Eingeschraenkte Delegation (msDS-AllowedToDelegateTo gesetzt)
+    $con = @(Get-ADObject -LDAPFilter '(msDS-AllowedToDelegateTo=*)' -Properties samAccountName)
+    if ($con.Count -gt 0) { $fa = 'Yellow' } else { $fa = 'Green' }
+    2werte "Eingeschraenkte Delegation:" "$($con.Count)" "s" $fa
+    foreach ($o in $con) { 2werte " $($o.samAccountName)" "AllowedToDelegateTo" "s" "Yellow" }
+    # 3) Ressourcenbasierte Delegation (msDS-AllowedToActOnBehalfOfOtherIdentity gesetzt)
+    $rbcd = @(Get-ADObject -LDAPFilter '(msDS-AllowedToActOnBehalfOfOtherIdentity=*)' -Properties samAccountName)
+    if ($rbcd.Count -gt 0) { $fa = 'Yellow' } else { $fa = 'Green' }
+    2werte "Ressourcenbasierte Delegation (RBCD):" "$($rbcd.Count)" "s" $fa
+    foreach ($o in $rbcd) { 2werte " $($o.samAccountName)" "AllowedToActOnBehalfOf" "s" "Yellow" }
+}
+function chk_kerb_enc {
+    # Konten, die ausschliesslich DES verwenden (UseDESKeyOnly = 0x200000 = 2097152).
+    $des = @(Get-ADObject -LDAPFilter '(userAccountControl:1.2.840.113556.1.4.803:=2097152)' `
+                -Properties samAccountName)
+    if ($des.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Konten mit 'nur DES' (UseDESKeyOnly):" "$($des.Count)" "s" $fa
+    foreach ($o in $des) { 2werte " $($o.samAccountName)" "UseDESKeyOnly" "s" $F_Fehler }
+}
+function chk_machine_quota {
+    $dn  = (Get-ADDomain).DistinguishedName
+    $maq = (Get-ADObject -Identity $dn -Properties 'ms-DS-MachineAccountQuota').'ms-DS-MachineAccountQuota'
+    if ($null -eq $maq) { $maq = 'n/a' }
+    if ("$maq" -eq '0') { $fa = 'Green' } else { $fa = $F_Fehler }
+    2werte "ms-DS-MachineAccountQuota:" "$maq" "s" $fa
+    2werte "Empfohlener Wert:" "0" "s"
 }
 ####################################################################################################
 ####################################################################################################
@@ -3765,6 +3915,19 @@ if($admusr -ge 1){
         if($AdmGri -eq 1) { dom_AdmGri }
         if($buildi -eq 1) { builtin_usr }
         if($priusr -eq 1) { AdmCount }
+    }
+}
+####################################################################################################
+## Bereich "Kerberos - Angriffsflaechen" (Paket A)                                                ##
+####################################################################################################
+if($kerbchk -ge 1){
+    Pruefbereich "Kerberos - Angriffsflaechen" -CheckId 'kerberos' {
+        Leerzeile
+        Unterpruefung "Kerberoasting (Konten mit SPN)" 'kerberoasting' { chk_kerberoasting }
+        Unterpruefung "AS-REP Roasting (ohne Vorauthentifizierung)" 'asrep' { chk_asrep }
+        Unterpruefung "Delegation (Unconstrained / Constrained / RBCD)" 'delegation' { chk_delegation }
+        Unterpruefung "Schwache Kerberos-Verschluesselung" 'kerb_enc' { chk_kerb_enc }
+        Unterpruefung "Computerkonten-Kontingent (MachineAccountQuota)" 'machine_quota' { chk_machine_quota }
     }
 }
 ####################################################################################################

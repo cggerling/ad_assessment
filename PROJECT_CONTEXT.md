@@ -85,7 +85,10 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 ## 5. Konventionen, die erhalten bleiben sollen
 
 - **Sprache:** Kommentare und Report-Texte sind **deutsch** — beibehalten.
-- **Dateikodierung:** UTF-8, **CRLF**-Zeilenenden — beibehalten.
+- **Dateikodierung:** UTF-8 **mit BOM**, **CRLF**-Zeilenenden — beibehalten. Der BOM ist
+  wichtig, damit Windows PowerShell 5.1 die Umlaute in den Katalogtexten korrekt liest
+  (BOM-lose UTF-8-Skripte interpretiert 5.1 als ANSI). Bei jeder Skript-Bearbeitung den
+  BOM erhalten bzw. wiederherstellen.
 - **Read-only-Charakter:** Es dürfen **keine schreibenden AD-Operationen** ergänzt werden.
 - **Schalter-Logik:** Bestehende Schalter-Variablen-Semantik (0/1/2) nicht brechen.
 - **Report-Layout:** Spaltenausrichtung/Rahmen ist Teil des Outputs; Änderungen daran sind
@@ -119,6 +122,32 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
   `Invoke-Pester -Path .\Tests`; läuft unter PowerShell 5.1 und 7.*
 
 ## 7. Aktueller Stand (Changelog)
+
+**v5.0 Nachtrag „Umlaute & Encoding" (in Paket-A-PR enthalten):**
+- Skript-Datei auf **UTF-8 mit BOM** umgestellt (PS 5.1 liest die Umlaute sonst falsch).
+- Alle 28 Katalogtexte (Zweck/Beispiel/Empfehlung/Titel) nutzen jetzt echte Umlaute statt
+  Transliteration. Wichtig: Nur Katalogtexte (HTML/JSON) — Bereichstitel und 2werte-Labels
+  bleiben ASCII, da sie auch in den ASCII-Text-Report fließen.
+- HTML-Überschriften nutzen den Katalog-Titel (DTitel, mit Umlauten) statt des ASCII-Titels,
+  wenn eine Doku folgt.
+- `Esc` escapet nur noch `< > & "`; Umlaute bleiben als echtes UTF-8 (keine `&#228;`-Entities).
+- HTML-Report wird mit BOM geschrieben (robuste Umlaute auch außerhalb des Browsers).
+
+**v5.0 PR „Paket A – Kerberos" (Juni 2026):**
+- Neuer Schalter `$kerbchk` (Default 1, in Override-Whitelist) und neuer Bereich
+  „Kerberos – Angriffsflaechen".
+- Neuer Helfer `Unterpruefung ($titel,$checkid,$aktion)`: Teilprüfung innerhalb eines
+  Bereichs mit eigener Begründung (`Doku`) und eigenem try/catch — ein fehlschlagender
+  Sub-Check überspringt nur sich selbst. HTML badged jetzt auch Unter-Überschriften (h3)
+  per Look-ahead und setzt Anker `#chk-<id>`.
+- Fünf read-only Checks: Kerberoasting (SPN-Konten), AS-REP-Roasting (DONT_REQ_PREAUTH),
+  Delegation (Unconstrained/Constrained/RBCD, DCs ausgenommen), schwache Verschlüsselung
+  (UseDESKeyOnly), MachineAccountQuota. Alle über bitweise LDAP-Filter
+  (`1.2.840.113556.1.4.803`).
+- Sechs neue Katalogeinträge (kerberos, kerberoasting, asrep, delegation, kerb_enc,
+  machine_quota) mit Quellen (MITRE ATT&CK, Microsoft, SpecterOps, CVE-2021-42278/42287).
+- Testsuite auf 59 Tests erweitert. **Wichtig:** Die AD-Abfragen selbst sind hier nicht
+  live testbar (kein AD-Modul) — Funktionstest erfolgt auf dem Test-DC.
 
 **v5.0 PR „Doku-Framework" (Juni 2026):**
 - Version auf 5.0 (Dateiname bleibt `Analyse_V4_6.ps1`).
