@@ -33,7 +33,7 @@ Describe 'Analyse_V4_6.ps1' {
         $zielFunktionen = @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                             'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
                             'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren',
-                            'Merken','Farbklasse','HTML_Report','JSON_Export')
+                            'Merken','Doku','Farbklasse','HTML_Report','JSON_Export')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
         }, $true) | Where-Object { $zielFunktionen -contains $_.Name }
@@ -44,6 +44,12 @@ Describe 'Analyse_V4_6.ps1' {
             $definition = $f.Extent.Text -replace '^function\s+', 'function global:'
             Invoke-Expression $definition
         }
+
+        ### Check-Katalog (Top-Level-Zuweisung) extrahieren und global bereitstellen ################
+        $katAst = $ast.FindAll({
+            param($a) $a -is [System.Management.Automation.Language.AssignmentStatementAst]
+        }, $true) | Where-Object { $_.Left.Extent.Text -eq '$CheckKatalog' } | Select-Object -First 1
+        Invoke-Expression ($katAst.Extent.Text -replace '^\$CheckKatalog', '$global:CheckKatalog')
 
         ### Kontrollierte Umgebung: gleiche Variablen wie im Skript-Kopf ###########################
         $global:sb           = 90
@@ -68,7 +74,7 @@ Describe 'Analyse_V4_6.ps1' {
         $global:A_Htm        = 1                    # Ereignis-Erfassung fuer HTML aktiv
         $global:A_Jsn        = 1                    # Ereignis-Erfassung fuer JSON aktiv
         $global:R_Daten      = New-Object 'System.Collections.Generic.List[object]'
-        $global:version      = 'Vers. 4.6'
+        $global:version      = 'Vers. 5.0'
 
         function global:Get-ReportZeilen {
             # Erst den Puffer in die Datei schreiben (gepufferte Ausgabe seit Performance-PR),
@@ -84,13 +90,13 @@ Describe 'Analyse_V4_6.ps1' {
         foreach ($n in @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                          'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
                          'neu_tab_max6w_fb','neu_text','Pruefbereich','Ausgabe','Puffer_leeren',
-                         'Merken','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen')) {
+                         'Merken','Doku','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
         foreach ($v in @('sb','zeichen','tabzeichen','tabtrenner','leer','type','maintitel',
                          'firma','madeby','datum','system','F_Rahmen','F_Ue_Schrift','F_Text',
                          'F_Fehler','A_Con','A_Dat','path','A_Puffer','A_Htm','A_Jsn',
-                         'R_Daten','version')) {
+                         'R_Daten','version','CheckKatalog')) {
             Remove-Variable -Name $v -Scope Global -Force -ErrorAction SilentlyContinue
         }
     }
@@ -111,6 +117,12 @@ Describe 'Analyse_V4_6.ps1' {
         It 'beginnt mit #Requires -Version' {
             (Get-Content -LiteralPath $skriptPfad -TotalCount 1) |
                 Should -Match '^#Requires -Version'
+        }
+
+        It 'fuehrt durchgaengig Version 5.0' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Match '\$version = "Vers\. 5\.0"'
+            $inhalt | Should -Match 'Version       : 5\.0'
         }
 
         It 'enthaelt die Modul-Vorabpruefung' {
@@ -435,10 +447,119 @@ Describe 'Analyse_V4_6.ps1' {
             Test-Path $jsonPfad | Should -BeTrue
             $daten = Get-Content -LiteralPath $jsonPfad -Raw | ConvertFrom-Json
             $daten.System | Should -Be 'TESTSYS'
-            $daten.Version | Should -Be 'Vers. 4.6'
+            $daten.Version | Should -Be 'Vers. 5.0'
             @($daten.Ereignisse).Count | Should -Be 2
             @($daten.Ereignisse)[1].Wert | Should -Be '42'
             Remove-Item $jsonPfad -Force
+        }
+    }
+
+    Context 'Doku-Framework (v5.0): Katalog, Severity, Begruendung' {
+
+        It 'Katalog enthaelt Eintraege und alle Pflichtfelder sind gefuellt' {
+            $global:CheckKatalog.Count | Should -BeGreaterOrEqual 22
+            foreach ($id in $global:CheckKatalog.Keys) {
+                foreach ($feld in 'Titel','Schwere','Zweck','Beispiel','Empfehlung','Quellen') {
+                    [string]::IsNullOrWhiteSpace($global:CheckKatalog[$id].$feld) |
+                        Should -BeFalse -Because "$id.$feld darf nicht leer sein"
+                }
+            }
+        }
+
+        It 'Katalog nutzt nur gueltige Schweregrade' {
+            $gueltig = 'Info','Niedrig','Mittel','Hoch','Kritisch'
+            foreach ($id in $global:CheckKatalog.Keys) {
+                $gueltig | Should -Contain $global:CheckKatalog[$id].Schwere
+            }
+        }
+
+        It 'jeder Pruefbereich-Aufruf im Hauptablauf traegt eine -CheckId' {
+            $aufrufe = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.CommandAst] -and
+                          $a.GetCommandName() -eq 'Pruefbereich'
+            }, $true)
+            $aufrufe.Count | Should -BeGreaterOrEqual 22
+            foreach ($cmd in $aufrufe) {
+                $hatCheckId = $cmd.CommandElements | Where-Object {
+                    $_ -is [System.Management.Automation.Language.CommandParameterAst] -and
+                    $_.ParameterName -eq 'CheckId'
+                }
+                $hatCheckId | Should -Not -BeNullOrEmpty -Because "Bereich '$($cmd.CommandElements[1].Extent.Text)' braucht eine CheckId"
+            }
+        }
+
+        It 'jede im Hauptablauf verwendete CheckId existiert im Katalog' {
+            $aufrufe = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.CommandAst] -and
+                          $a.GetCommandName() -eq 'Pruefbereich'
+            }, $true)
+            foreach ($cmd in $aufrufe) {
+                $els = $cmd.CommandElements
+                for ($i = 0; $i -lt $els.Count; $i++) {
+                    if ($els[$i] -is [System.Management.Automation.Language.CommandParameterAst] -and
+                        $els[$i].ParameterName -eq 'CheckId') {
+                        $id = if ($els[$i].Argument) { $els[$i].Argument.Value } else { $els[$i + 1].Value }
+                        $global:CheckKatalog.Keys | Should -Contain $id
+                    }
+                }
+            }
+        }
+
+        It 'Doku emittiert ein Ereignis mit allen Begruendungsfeldern' {
+            Doku 'admins'
+            $global:R_Daten.Count | Should -Be 1
+            $d = $global:R_Daten[0]
+            $d.Art | Should -Be 'Doku'
+            $d.CheckId | Should -Be 'admins'
+            $d.Schwere | Should -Be 'Hoch'
+            $d.Zweck | Should -Not -BeNullOrEmpty
+            $d.Empfehlung | Should -Not -BeNullOrEmpty
+            $d.Quellen | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Doku bei unbekannter ID erzeugt kein Ereignis' {
+            Doku 'gibt_es_nicht'
+            $global:R_Daten.Count | Should -Be 0
+        }
+
+        It 'Pruefbereich mit CheckId schreibt Bereich + Doku in die Ereignisliste' {
+            Pruefbereich 'Testbereich' -CheckId 'dns' { Leerzeile }
+            $arten = $global:R_Daten | ForEach-Object { $_.Art }
+            $arten | Should -Contain 'Bereich'
+            $arten | Should -Contain 'Doku'
+            ($global:R_Daten | Where-Object { $_.Art -eq 'Doku' }).CheckId | Should -Be 'dns'
+        }
+
+        It 'HTML_Report rendert einklappbaren Doku-Block, Severity-Badge und Zusammenfassung' {
+            Header
+            Pruefbereich 'Administratoren und Builtin Benutzer' -CheckId 'admins' {
+                2werte 'Domain Admins:' '5 Mitglieder' $null 'Red'
+            }
+            Pruefbereich 'DNS - Check' -CheckId 'dns' { 2werte 'Scavenging:' 'aus' $null 'Yellow' }
+            HTML_Report
+            $htmlPfad = [System.IO.Path]::ChangeExtension($global:path, 'html')
+            $html = Get-Content -LiteralPath $htmlPfad -Raw
+            $html | Should -Match '<details class="doku">'                       # einklappbar
+            $html | Should -Match '<summary>Hintergrund &amp; Empfehlung</summary>'
+            $html | Should -Match '<span class="lbl">Zweck:</span>'
+            $html | Should -Match '<span class="lbl">Empfehlung:</span>'
+            $html | Should -Match 'badge sev-hoch'                               # Severity-Badge
+            $html | Should -Match 'id="chk-admins"'                             # Anker
+            $html | Should -Match '<section class="zus">'                        # Zusammenfassung
+            $html | Should -Match 'href="#chk-dns"'                             # Sprungmarke
+            Remove-Item $htmlPfad -Force -ErrorAction SilentlyContinue
+        }
+
+        It 'JSON enthaelt das Doku-Ereignis mit Begruendungsfeldern' {
+            Pruefbereich 'Testbereich' -CheckId 'ca' { 2werte 'CA:' 'vorhanden' }
+            JSON_Export
+            $jsonPfad = [System.IO.Path]::ChangeExtension($global:path, 'json')
+            $daten = Get-Content -LiteralPath $jsonPfad -Raw | ConvertFrom-Json
+            $doku = @($daten.Ereignisse | Where-Object { $_.Art -eq 'Doku' })
+            $doku.Count | Should -Be 1
+            $doku[0].DTitel | Should -Be 'Zertifizierungsstelle(n)'
+            $doku[0].Empfehlung | Should -Not -BeNullOrEmpty
+            Remove-Item $jsonPfad -Force -ErrorAction SilentlyContinue
         }
     }
 

@@ -13,7 +13,8 @@
 - Es arbeitet **ausschließlich lesend** — es führen keine Funktionen schreibende
   AD-Operationen aus. *(Verifiziert: keine `Set-AD*`/`New-AD*`/`Remove-AD*`-Aufrufe gefunden;
   einzige schreibende Aktion ist das Anlegen von Ausgabeverzeichnis/-datei.)*
-- Aktuelle Version laut Kopf: **4.6**.
+- Aktuelle Version laut Kopf: **5.0** (Ausbau zum Security-Assessment, laufend; Dateiname
+  bleibt vorerst `Analyse_V4_6.ps1` aus Kontinuitätsgründen).
 
 ## 2. Tech-Stack & Abhängigkeiten *(verifiziert anhand der genutzten Cmdlets)*
 
@@ -118,6 +119,24 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
   `Invoke-Pester -Path .\Tests`; läuft unter PowerShell 5.1 und 7.*
 
 ## 7. Aktueller Stand (Changelog)
+
+**v5.0 PR „Doku-Framework" (Juni 2026):**
+- Version auf 5.0 (Dateiname bleibt `Analyse_V4_6.ps1`).
+- Zentraler `$CheckKatalog` (22 Einträge): je Prüfbereich Titel, **Schwere**
+  (Info/Niedrig/Mittel/Hoch/Kritisch) und vier Begründungsfelder
+  (Zweck, Beispiel, Empfehlung, Quellen) — ASCII-transliteriert wegen PS-5.1-Encoding.
+- `Doku <id>` emittiert den Katalogeintrag als `Doku`-Ereignis (über `Merken`);
+  `Pruefbereich` nimmt jetzt optional `-CheckId` und ruft `Doku` direkt nach `Bereich`.
+  Alle 22 Hauptablauf-Blöcke sind damit verdrahtet.
+- HTML-Report: **Executive Summary** oben (Bereiche nach Einstufung, mit Sprungmarken +
+  Severity-Badges), je Bereich ein **einklappbarer** Block „Hintergrund & Empfehlung"
+  (`<details>`), Severity-Badge an der Bereichs-Überschrift, Anker `#chk-<id>`.
+  Neue CSS-Variable `--info-bg`, Badge-/Doku-/Zusammenfassungs-Styles.
+- JSON-Export enthält die `Doku`-Ereignisse mit allen Begründungsfeldern.
+- Testsuite auf 53 Tests erweitert (Katalog-Vollständigkeit, gültige Schweregrade,
+  jeder Bereich hat gültige `-CheckId`, Doku-/HTML-/JSON-Rendering, Versionsprüfung).
+- Geplant (eigene PRs): Paket A Kerberos, B Privilegien/ACLs, C AD CS (ESC1–8),
+  D GPO/SYSVOL-Geheimnisse, E DC-Härtung, F Delta-Modus.
 
 **PR „Export" (Juni 2026):**
 - Strukturierte Erfassung: Die Formatierungsfunktionen melden jede Ausgabe als Ereignis an
