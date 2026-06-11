@@ -2605,27 +2605,27 @@ function clt_chk {
 function srv_chk {
     $zaehler_s = 0
     ##### Server 2000 ##############################################################################
-    $2000 = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2000' }).count
+    $2000 = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2000' }).Count
     if($2000 -eq 0) { $2000 = "0" ; $f2k = "Green" } elseif($2000 -gt 1) { $f2k = "Red" } 
         else { $2000 = "1" ; $f2k = "Red" }
     $2000ko = Get-ADComputer -filter * -Properties * | `
         Where-Object {$_.operatingsystem -like 'windows server 2000' }
     $zaehler_s = $zaehler_s + $2000
     ##### Server 2003 ##############################################################################
-    $2003 = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2003' }).count
+    $2003 = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2003' }).Count
     if($2003 -eq 0) { $2003 = "0" ; $f2k3 = "Green" } elseif($2003 -gt 1) { $f2k3 = "Red" } 
         else { $2003 = "1" ; $f2k3 = "Red" }
     $2003ko = Get-ADComputer -filter * -Properties * | `
         Where-Object {$_.operatingsystem -like 'windows server 2003' }
     $zaehler_s = $zaehler_s + $2003
     ##### Server 2008 ##############################################################################
-    $2008 = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2008*' }).count
-    $2008r = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2008 R2*' }).count
-    $2008 = $2008 - $2008r
+    $2008 = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2008*' }).Count
+    $2008r = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2008 R2*' }).Count
+    $2008 = [int]$2008 - [int]$2008r
     if($2008 -eq 0) { $2008 = "0" ; $f2k8 = "Green" } elseif($2008 -gt 1) { $f2k8 = "Red" } 
         else { $2008 = "1" ; $f2k8 = "Red" }
     if($2008r -eq 0) { $2008r = "0" ; $f2k8r = "Green" } elseif($2008r -gt 1) { $f2k8r = "Red" } 
@@ -2634,11 +2634,11 @@ function srv_chk {
         Where-Object {$_.operatingsystem -like 'windows server 2008*' } | Sort-Object operatingsystem
     $zaehler_s = $zaehler_s + $2008r + $2008
     ##### Server 2012 ##############################################################################
-    $2012 = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2012*' }).count
-    $2012r = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2012 R2*' }).count
-    $2012 = $2012 - $2012r
+    $2012 = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2012*' }).Count
+    $2012r = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2012 R2*' }).Count
+    $2012 = [int]$2012 - [int]$2012r
     if($2012 -eq 0) { $2012 = "0" ; $f2k12 = "Green" } elseif($2012 -gt 1) { $f2k12 = "Red" } 
         else { $2012 = "1" ; $f2k12 = "Red" }
     if($2012r -eq 0) { $2012r = "0" ; $f2k12r = "Green" } elseif($2012r -gt 1) { $f2k12r = "Red" } 
@@ -2647,24 +2647,24 @@ function srv_chk {
         Where-Object {$_.operatingsystem -like 'windows server 2012*' } | Sort-Object operatingsystem
     $zaehler_s = $zaehler_s + $2012
     ##### Server 2016 ##############################################################################
-    $2016 = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2016*' }).count
+    $2016 = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2016*' }).Count
     if($2016 -eq 0) { $2016 = "0" ; $f2k16 = "Green" } elseif($2016 -gt 1) { $f2k16 = "Yellow" } 
         else { $2016 = "1" ; $f2k16 = "Yellow" }
     $2016ko = Get-ADComputer -filter * -Properties * | `
         Where-Object {$_.operatingsystem -like 'windows server 2016*' }
     $zaehler_s = $zaehler_s + $2016
     ##### Server 2019 ##############################################################################
-    $2019 = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2019*' }).count
+    $2019 = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2019*' }).Count
     if($2019 -eq 0) { $2019 = "0" ; $f2k19 = "Green" } elseif($2019 -gt 1) { $f2k19 = "Green" } 
         else { $2019 = "1" ; $f2k19 = "Green" }
     $2019ko = Get-ADComputer -filter * -Properties * | `
         Where-Object {$_.operatingsystem -like 'windows server 2019*' }
     $zaehler_s = $zaehler_s + $2019
     ##### Server 2022 ##############################################################################
-    $2022 = (Get-ADComputer -filter * -Properties * | `
-        Where-Object {$_.operatingsystem -like 'windows server 2022*' }).count
+    $2022 = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2022*' }).Count
     if($2022 -eq 0) { $2022 = "0" ; $f2k22 = "Green" } elseif($2022 -gt 1) { $f2k22 = "Green" } 
         else { $2022 = "1" ; $f2k22 = "Green" }
     $2022ko = Get-ADComputer -filter * -Properties * | `

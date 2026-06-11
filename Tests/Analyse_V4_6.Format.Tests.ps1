@@ -141,6 +141,20 @@ Describe 'Analyse_V4_6.ps1' {
             $inhalt | Should -Match 'Get-Module -ListAvailable -Name DnsServer'
         }
 
+        It 'srv_chk zaehlt robust (@(...).Count) und castet die Subtraktion ([int])' {
+            $srv = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                          $a.Name -eq 'srv_chk'
+            }, $true) | Select-Object -First 1
+            $srv | Should -Not -BeNullOrEmpty
+            $txt = $srv.Extent.Text
+            # keine fragile Kleinschreibung ").count" mehr (case-sensitiv, sonst matcht ".Count")
+            $txt | Should -Not -CMatch '\)\.count'
+            # die beiden Subtraktionen sind int-sicher
+            $txt | Should -Match '\[int\]\$2008 - \[int\]\$2008r'
+            $txt | Should -Match '\[int\]\$2012 - \[int\]\$2012r'
+        }
+
         It 'Hauptablauf nutzt Pruefbereich (kein ungeschuetzter Bereich-Aufruf auf Top-Level)' {
             $bereichAufrufe = $ast.FindAll({
                 param($a) $a -is [System.Management.Automation.Language.CommandAst]
