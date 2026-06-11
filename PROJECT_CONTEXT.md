@@ -120,6 +120,22 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Paket A – Kerberos" (Juni 2026):**
+- Neuer Schalter `$kerbchk` (Default 1, in Override-Whitelist) und neuer Bereich
+  „Kerberos – Angriffsflaechen".
+- Neuer Helfer `Unterpruefung ($titel,$checkid,$aktion)`: Teilprüfung innerhalb eines
+  Bereichs mit eigener Begründung (`Doku`) und eigenem try/catch — ein fehlschlagender
+  Sub-Check überspringt nur sich selbst. HTML badged jetzt auch Unter-Überschriften (h3)
+  per Look-ahead und setzt Anker `#chk-<id>`.
+- Fünf read-only Checks: Kerberoasting (SPN-Konten), AS-REP-Roasting (DONT_REQ_PREAUTH),
+  Delegation (Unconstrained/Constrained/RBCD, DCs ausgenommen), schwache Verschlüsselung
+  (UseDESKeyOnly), MachineAccountQuota. Alle über bitweise LDAP-Filter
+  (`1.2.840.113556.1.4.803`).
+- Sechs neue Katalogeinträge (kerberos, kerberoasting, asrep, delegation, kerb_enc,
+  machine_quota) mit Quellen (MITRE ATT&CK, Microsoft, SpecterOps, CVE-2021-42278/42287).
+- Testsuite auf 59 Tests erweitert. **Wichtig:** Die AD-Abfragen selbst sind hier nicht
+  live testbar (kein AD-Modul) — Funktionstest erfolgt auf dem Test-DC.
+
 **v5.0 PR „Doku-Framework" (Juni 2026):**
 - Version auf 5.0 (Dateiname bleibt `Analyse_V4_6.ps1`).
 - Zentraler `$CheckKatalog` (22 Einträge): je Prüfbereich Titel, **Schwere**

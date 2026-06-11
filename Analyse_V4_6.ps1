@@ -163,6 +163,8 @@ $OrgUni = 1                                      # OU Check aus/ein          (0=
 $caschk = 1                                      # CA Check aus/ein                  (0=nein,1=ja) #
 # Check der einzelnen Domain Controller #        ###################################################
 $DomCon = 1                                      # DC Check aus/ein     (0=nein,1=Teil,2=komplett) #
+# Sicherheit: Kerberos-Angriffsflaechen (v5.0)   ###################################################
+$kerbchk = 1                                     # Kerberos-Checks (Paket A)         (0=nein,1=ja) #
 ####################################################################################################
 # Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
 ################################################################                                   #
@@ -175,7 +177,7 @@ if ($Bereiche) {                                 # Einzelne Schalter per Hashtab
     $schalterListe = @('domoco','schema','censto','sectem','domdcs','loggin','adtchk','dnschk',    #
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
                        'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
-                       'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon')             #
+                       'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk')   #
     foreach ($schalter in $Bereiche.Keys) {                                                        #
         if ($schalterListe -contains $schalter) {                                                  #
             Set-Variable -Name $schalter -Value ([int]$Bereiche[$schalter])                        #
@@ -408,6 +410,48 @@ $CheckKatalog = @{
         Beispiel = 'Ist SMB1 auf einem DC noch aktiv, ist er ueber laengst bekannte Luecken (z. B. EternalBlue) angreifbar; fehlendes LDAPS erlaubt das Mitlesen von Verzeichnisanfragen.'
         Empfehlung = 'SMB1 entfernen, LDAPS/LDAP-Signing erzwingen, NTLM einschraenken, DCs nach CIS-/Microsoft-Baseline haerten.'
         Quellen = 'Microsoft Security Baselines; CIS Microsoft Windows Server Benchmark'
+    }
+    'kerberos' = @{
+        Titel = 'Kerberos - Angriffsflaechen'; Schwere = 'Hoch'
+        Zweck = 'Buendelt die wichtigsten Kerberos-bezogenen Angriffsflaechen einer AD-Umgebung: angreifbare Dienstkonten, fehlende Vorauthentifizierung, missbrauchbare Delegation, schwache Verschluesselung und das Computerkonten-Kontingent.'
+        Beispiel = 'Diese Schwachstellen erlauben es einem normalen Domaenenbenutzer haeufig, ohne Adminrechte an privilegierte Anmeldedaten zu gelangen - ein klassischer Einstieg in die Domaenenuebernahme.'
+        Empfehlung = 'Die einzelnen Teilpruefungen abarbeiten; Dienstkonten auf gMSA umstellen, AES erzwingen, Delegation minimieren und das Kontingent auf 0 setzen.'
+        Quellen = 'MITRE ATT&CK TA0006 (Credential Access); Microsoft - Securing Privileged Access; adsecurity.org'
+    }
+    'kerberoasting' = @{
+        Titel = 'Kerberoasting (Konten mit SPN)'; Schwere = 'Hoch'
+        Zweck = 'Listet aktivierte Benutzerkonten (keine Computer) mit gesetztem servicePrincipalName auf. Solche Konten geben Kerberos-Service-Tickets aus, deren Verschluesselung vom Kontopasswort abgeleitet ist und offline geknackt werden kann.'
+        Beispiel = 'Jeder Domaenenbenutzer fordert fuer ein SPN-Konto ein Service-Ticket an und knackt es offline (z. B. Hashcat). Da das Knacken ohne DC-Kontakt laeuft, bleibt es unauffaellig. Steckt das Konto in Domain Admins, ist die Domaene kompromittiert.'
+        Empfehlung = 'Dienstkonten auf (group) Managed Service Accounts umstellen (automatische 120-Zeichen-Passwoerter); sonst Passwoerter >= 25 Zeichen, AES erzwingen, privilegierte Konten nie mit SPN betreiben.'
+        Quellen = 'MITRE ATT&CK T1558.003; Microsoft - Service Principal Names; adsecurity.org'
+    }
+    'asrep' = @{
+        Titel = 'AS-REP Roasting (ohne Vorauthentifizierung)'; Schwere = 'Hoch'
+        Zweck = 'Findet Konten mit gesetztem Flag DONT_REQ_PREAUTH (Kerberos-Vorauthentifizierung nicht erforderlich). Fuer solche Konten kann ein Angreifer ohne jede Anmeldung ein verschluesseltes Material anfordern und offline knacken.'
+        Beispiel = 'Ein Angreifer fragt fuer ein Konto ohne Pre-Auth einen AS-REP an und knackt das daraus ableitbare Passwort-Hash offline - ganz ohne gueltige Anmeldedaten in der Domaene.'
+        Empfehlung = 'Flag "Kerberos-Preauthentifizierung nicht erforderlich" entfernen, wo immer moeglich; betroffene Konten mit starken Passwoertern versehen bzw. deaktivieren.'
+        Quellen = 'MITRE ATT&CK T1558.004; Microsoft - userAccountControl flags (DONT_REQ_PREAUTH)'
+    }
+    'delegation' = @{
+        Titel = 'Delegation (Unconstrained / Constrained / RBCD)'; Schwere = 'Hoch'
+        Zweck = 'Prueft Konten/Computer mit Kerberos-Delegationsrechten: uneingeschraenkt (TrustedForDelegation), eingeschraenkt (msDS-AllowedToDelegateTo) und ressourcenbasiert (msDS-AllowedToActOnBehalfOfOtherIdentity). Domaenencontroller werden ausgenommen.'
+        Beispiel = 'Ein Computer mit uneingeschraenkter Delegation kann Kerberos-Tickets beliebiger Benutzer (inkl. Domain Admins) zwischenspeichern und missbrauchen. RBCD-Eintraege sind ein beliebter moderner Eskalationspfad.'
+        Empfehlung = 'Uneingeschraenkte Delegation vermeiden; auf eingeschraenkte Delegation (am besten mit Protocol Transition aus) umstellen; sensible Konten als "Konto ist vertraulich und kann nicht delegiert werden" markieren bzw. in Protected Users aufnehmen.'
+        Quellen = 'MITRE ATT&CK T1558; SpecterOps - Delegation/RBCD; Microsoft - Kerberos constrained delegation'
+    }
+    'kerb_enc' = @{
+        Titel = 'Schwache Kerberos-Verschluesselung'; Schwere = 'Mittel'
+        Zweck = 'Findet Konten, die ausschliesslich DES verwenden (UAC-Flag UseDESKeyOnly). DES (und ebenso RC4) gelten als gebrochen bzw. veraltet und erleichtern das Knacken von Tickets erheblich.'
+        Beispiel = 'Ein Dienstkonto mit erzwungenem DES gibt Tickets aus, die mit heutiger Hardware sehr schnell zu brechen sind - ein bevorzugtes Kerberoasting-Ziel.'
+        Empfehlung = 'UseDESKeyOnly entfernen; AES (msDS-SupportedEncryptionTypes auf AES128/AES256) erzwingen und RC4 schrittweise abschalten.'
+        Quellen = 'Microsoft - Network security: Configure encryption types allowed for Kerberos; MITRE ATT&CK T1558'
+    }
+    'machine_quota' = @{
+        Titel = 'Computerkonten-Kontingent (MachineAccountQuota)'; Schwere = 'Hoch'
+        Zweck = 'Liest am Domaenenobjekt das Attribut ms-DS-MachineAccountQuota aus - die Anzahl Computerkonten, die ein nicht-privilegierter Benutzer selbst in die Domaene aufnehmen darf. Standard ist 10.'
+        Beispiel = 'Mit jedem gueltigen Benutzerkonto kann ein Angreifer bei Wert > 0 ein eigenes Computerkonto anlegen und dieses fuer Resource-Based Constrained Delegation oder die noPac-Luecke (CVE-2021-42278/42287) zur Rechteausweitung missbrauchen.'
+        Empfehlung = 'Wert auf 0 setzen und das Anlegen von Computerkonten an eine dedizierte, delegierte Gruppe binden.'
+        Quellen = 'Microsoft Learn - ms-DS-MachineAccountQuota; SpecterOps (RBCD); CVE-2021-42278/42287'
     }
 }
 function Doku ($id) {
@@ -1034,6 +1078,24 @@ function Pruefbereich ($titel,[scriptblock]$aktion,$CheckId) {
     }
     finally { Puffer_leeren }                    # Bereich fertig -> Puffer in die Datei schreiben #
 }
+function Unterpruefung ($titel,$checkid,[scriptblock]$aktion) {
+    ### Legende ####################################################################################
+    # Teilpruefung innerhalb eines Bereichs (z.B. einzelner Kerberos-Check).                       #
+    # $titel   = Unterueberschrift (Bereichstitel -> h3)                                           #
+    # $checkid = Katalog-ID; emittiert direkt danach die Begruendung (Doku)                        #
+    # $aktion  = Scriptblock mit der eigentlichen Pruefung; eigener try/catch, damit ein           #
+    #            Fehler nur diese Teilpruefung ueberspringt, nicht den ganzen Bereich.             #
+    ################################################################################################
+    Bereichstitel $titel
+    if ($checkid) { Doku $checkid }
+    Leerzeile
+    try { & $aktion }
+    catch {
+        neu_text 0 '!' "Hinweis: Teilpruefung uebersprungen" `
+            "Meldung: $($_.Exception.Message). Die uebrigen Pruefungen dieses Bereichs laufen weiter."
+    }
+    Leerzeile
+}
 ####################################################################################################
 # Export-Funktionen: HTML-Report (im Stil von water.css) und JSON-Export                           #
 ####################################################################################################
@@ -1152,7 +1214,16 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
                 [void]$H.AppendLine("<p><span class=""lbl"">Quellen:</span> $(Esc $e.Quellen)</p>")
                 [void]$H.AppendLine('</details>')
             }
-            'Titel'    { [void]$H.AppendLine("<h3>$(Esc $e.Text)</h3>") }
+            'Titel'    {
+                # Wie bei 'Bereich': folgt ein Doku-Ereignis, bekommt die Unterueberschrift
+                # Anker-ID und Severity-Badge (fuer Unterpruefungen der Sicherheits-Pakete).
+                $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
+                if ($next -and $next.Art -eq 'Doku') {
+                    [void]$H.AppendLine("<h3 id=""chk-$($next.CheckId)"">$(Esc $e.Text) <span class=""badge $(SevKlasse $next.Schwere)"">$(Esc $next.Schwere)</span></h3>")
+                } else {
+                    [void]$H.AppendLine("<h3>$(Esc $e.Text)</h3>")
+                }
+            }
             'Subtitel' { [void]$H.AppendLine("<h4>$(Esc $e.Text)</h4>") }
             'Wert'     {
                 if ($offen -ne 'kv') {
@@ -3677,7 +3748,79 @@ function AD_Controller {
         dcprog $dcon
         dcdienste $dcon
         }
-      }   
+      }
+}
+####################################################################################################
+# Sicherheit Paket A: Kerberos-Angriffsflaechen (read-only LDAP-Abfragen)                          #
+####################################################################################################
+function chk_kerberoasting {
+    # Aktivierte Benutzerkonten (keine Computer) mit SPN -> Kerberoasting-faehig. krbtgt ausgenommen.
+    $spn = @(Get-ADUser -LDAPFilter '(&(servicePrincipalName=*)(!userAccountControl:1.2.840.113556.1.4.803:=2))' `
+                -Properties servicePrincipalName, adminCount |
+             Where-Object { $_.SamAccountName -ne 'krbtgt' })
+    $anz = $spn.Count
+    if ($anz -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Benutzerkonten mit SPN:" "$anz" "s" $fa
+    $priv = @($spn | Where-Object { $_.adminCount -eq 1 })
+    if ($priv.Count -gt 0) { 2werte "davon privilegiert (AdminCount=1):" "$($priv.Count)" "s" $F_Fehler }
+    if ($anz -gt 0) {
+        Leerzeile
+        Bereichstitel "Betroffene Konten:" "s"
+        Leerzeile
+        foreach ($u in $spn) {
+            $kennz = if ($u.adminCount -eq 1) { 'privilegiert!' } else { 'Standardkonto' }
+            $cfa   = if ($u.adminCount -eq 1) { $F_Fehler } else { $F_Text }
+            2werte " $($u.SamAccountName)" $kennz "s" $cfa
+        }
+    }
+}
+function chk_asrep {
+    # Konten ohne Kerberos-Vorauthentifizierung (DONT_REQ_PREAUTH) -> AS-REP-Roasting-faehig.
+    $asr = @(Get-ADUser -LDAPFilter '(userAccountControl:1.2.840.113556.1.4.803:=4194304)' `
+                -Properties userAccountControl)
+    $anz = $asr.Count
+    if ($anz -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Konten ohne Vorauthentifizierung:" "$anz" "s" $fa
+    if ($anz -gt 0) {
+        Leerzeile
+        foreach ($u in $asr) { 2werte " $($u.SamAccountName)" "DONT_REQ_PREAUTH" "s" $F_Fehler }
+    }
+}
+function chk_delegation {
+    # DC-Namen zum Ausschluss (DCs haben legitim uneingeschraenkte Delegation).
+    $dcNamen = @($DCs | ForEach-Object { $_.Name })
+    # 1) Uneingeschraenkte Delegation (TRUSTED_FOR_DELEGATION = 0x80000 = 524288)
+    $uncon = @(Get-ADObject -LDAPFilter '(userAccountControl:1.2.840.113556.1.4.803:=524288)' `
+                -Properties samAccountName | Where-Object { $dcNamen -notcontains ($_.samAccountName -replace '\$$','') })
+    if ($uncon.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Uneingeschraenkte Delegation (ohne DCs):" "$($uncon.Count)" "s" $fa
+    foreach ($o in $uncon) { 2werte " $($o.samAccountName)" "TrustedForDelegation" "s" $F_Fehler }
+    # 2) Eingeschraenkte Delegation (msDS-AllowedToDelegateTo gesetzt)
+    $con = @(Get-ADObject -LDAPFilter '(msDS-AllowedToDelegateTo=*)' -Properties samAccountName)
+    if ($con.Count -gt 0) { $fa = 'Yellow' } else { $fa = 'Green' }
+    2werte "Eingeschraenkte Delegation:" "$($con.Count)" "s" $fa
+    foreach ($o in $con) { 2werte " $($o.samAccountName)" "AllowedToDelegateTo" "s" "Yellow" }
+    # 3) Ressourcenbasierte Delegation (msDS-AllowedToActOnBehalfOfOtherIdentity gesetzt)
+    $rbcd = @(Get-ADObject -LDAPFilter '(msDS-AllowedToActOnBehalfOfOtherIdentity=*)' -Properties samAccountName)
+    if ($rbcd.Count -gt 0) { $fa = 'Yellow' } else { $fa = 'Green' }
+    2werte "Ressourcenbasierte Delegation (RBCD):" "$($rbcd.Count)" "s" $fa
+    foreach ($o in $rbcd) { 2werte " $($o.samAccountName)" "AllowedToActOnBehalfOf" "s" "Yellow" }
+}
+function chk_kerb_enc {
+    # Konten, die ausschliesslich DES verwenden (UseDESKeyOnly = 0x200000 = 2097152).
+    $des = @(Get-ADObject -LDAPFilter '(userAccountControl:1.2.840.113556.1.4.803:=2097152)' `
+                -Properties samAccountName)
+    if ($des.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Konten mit 'nur DES' (UseDESKeyOnly):" "$($des.Count)" "s" $fa
+    foreach ($o in $des) { 2werte " $($o.samAccountName)" "UseDESKeyOnly" "s" $F_Fehler }
+}
+function chk_machine_quota {
+    $dn  = (Get-ADDomain).DistinguishedName
+    $maq = (Get-ADObject -Identity $dn -Properties 'ms-DS-MachineAccountQuota').'ms-DS-MachineAccountQuota'
+    if ($null -eq $maq) { $maq = 'n/a' }
+    if ("$maq" -eq '0') { $fa = 'Green' } else { $fa = $F_Fehler }
+    2werte "ms-DS-MachineAccountQuota:" "$maq" "s" $fa
+    2werte "Empfohlener Wert:" "0" "s"
 }
 ####################################################################################################
 ####################################################################################################
@@ -3765,6 +3908,19 @@ if($admusr -ge 1){
         if($AdmGri -eq 1) { dom_AdmGri }
         if($buildi -eq 1) { builtin_usr }
         if($priusr -eq 1) { AdmCount }
+    }
+}
+####################################################################################################
+## Bereich "Kerberos - Angriffsflaechen" (Paket A)                                                ##
+####################################################################################################
+if($kerbchk -ge 1){
+    Pruefbereich "Kerberos - Angriffsflaechen" -CheckId 'kerberos' {
+        Leerzeile
+        Unterpruefung "Kerberoasting (Konten mit SPN)" 'kerberoasting' { chk_kerberoasting }
+        Unterpruefung "AS-REP Roasting (ohne Vorauthentifizierung)" 'asrep' { chk_asrep }
+        Unterpruefung "Delegation (Unconstrained / Constrained / RBCD)" 'delegation' { chk_delegation }
+        Unterpruefung "Schwache Kerberos-Verschluesselung" 'kerb_enc' { chk_kerb_enc }
+        Unterpruefung "Computerkonten-Kontingent (MachineAccountQuota)" 'machine_quota' { chk_machine_quota }
     }
 }
 ####################################################################################################
