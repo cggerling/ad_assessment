@@ -262,154 +262,228 @@ $CheckKatalog = @{
         Zweck = 'Erfasst Grunddaten von Domäne und Forest: Funktionsebenen, FSMO-Rollenverteilung, AD-Papierkorb und das Alter des krbtgt-Kontos. Diese Werte bilden die Basis für alle weiteren Bewertungen.'
         Beispiel = 'Eine niedrige Funktionsebene (z. B. Windows Server 2008) verhindert moderne Sicherheitsfunktionen wie AD-Papierkorb oder gMSA. Ein sehr altes krbtgt-Passwort erleichtert Golden-Ticket-Angriffe.'
         Empfehlung = 'Funktionsebenen auf den höchsten von allen DCs unterstützten Stand heben; AD-Papierkorb aktivieren; krbtgt-Passwort regelmäßig (zweifach im Abstand) zurücksetzen.'
-        Quellen = 'Microsoft Learn - Forest/Domain Functional Levels; Microsoft - krbtgt account maintenance'
+        Hintergrund = 'Funktionsebenen (Domain/Forest Functional Level) legen fest, welche AD-Features und welche DC-Betriebssysteme möglich sind. FSMO-Rollen sind fünf Sonderaufgaben (u. a. PDC-Emulator, RID-, Schema-Master), die je nur ein DC innehat. Das krbtgt-Konto hält den Schlüssel, mit dem alle Kerberos-TGTs signiert werden - wer dessen Hash kennt, kann beliebige "Golden Tickets" ausstellen; daher ist das Passwortalter relevant. Der AD-Papierkorb (ab Funktionsebene 2008 R2) erlaubt das Wiederherstellen gelöschter Objekte.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Active Directory Domain Services Functional Levels'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/active-directory-functional-levels' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'central_store' = @{
         Titel = 'Central Store & Templates'; Schwere = 'Niedrig'
         Zweck = 'Prüft, ob ein zentraler Speicher (Central Store) für GPO-Vorlagen (ADMX/ADML) im SYSVOL existiert und ob Security-Templates vorhanden sind. Der Central Store hält die GPO-Vorlagen auf allen DCs einheitlich.'
         Beispiel = 'Ohne Central Store ziehen Administratoren die ADMX-Dateien vom lokalen Rechner - je nach Patchstand fehlen dann Richtlinien-Einstellungen oder sind uneinheitlich.'
         Empfehlung = 'Central Store unter \\<Domäne>\SYSVOL\<Domäne>\Policies\PolicyDefinitions anlegen und aktuell halten.'
-        Quellen = 'Microsoft Learn - Create and manage the Central Store for Group Policy ADMX templates'
+        Hintergrund = 'Gruppenrichtlinien-Vorlagen liegen als sprachneutrale .admx- und sprachspezifische .adml-Dateien vor. Ohne Central Store liest jede Verwaltungsstation diese aus ihrem lokalen C:\Windows\PolicyDefinitions - bei unterschiedlichen Patchständen entstehen abweichende oder fehlende Richtlinien-Definitionen ("SYSVOL bloat" entfällt mit ADMX zusätzlich). Der Central Store unter \\<Domäne>\SYSVOL\<Domäne>\Policies\PolicyDefinitions wird von den GPO-Werkzeugen bevorzugt und repliziert mit SYSVOL auf alle DCs.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Create and Manage the Central Store for Group Policy ADMX templates'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-client/group-policy/create-and-manage-central-store' }
+        )
     }
     'domain_controller' = @{
         Titel = 'Domain Controller (Übersicht)'; Schwere = 'Info'
         Zweck = 'Listet die Domänencontroller des Forest mit Betriebssystem, Standort (Site) und Global-Catalog-Rolle auf. Verschafft den Überblick, welche DCs vorhanden sind.'
         Beispiel = 'Ein DC mit nicht mehr unterstütztem Betriebssystem (z. B. Windows Server 2012 R2 ohne ESU) erhält keine Sicherheitsupdates mehr und ist ein bevorzugtes Angriffsziel.'
         Empfehlung = 'DCs auf unterstützten, aktuell gepatchten Betriebssystemen betreiben; nicht mehr benötigte DCs sauber heruntergraden.'
-        Quellen = 'Microsoft - Windows Server lifecycle'
+        Hintergrund = 'Domänencontroller beantworten Authentifizierung (Kerberos/NTLM), LDAP-Anfragen und Replikation. Welche DC-Betriebssysteme zulässig sind, hängt an der Funktionsebene. Ein DC auf einem abgekündigten OS erhält keine Sicherheitsupdates mehr und ist als Tier-0-System (höchste Schutzklasse) besonders kritisch - eine Kompromittierung gefährdet die gesamte Domäne.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Active Directory Domain Services Functional Levels'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/active-directory-functional-levels' }
+            @{ Titel = 'Microsoft Lifecycle - Windows Lifecycle FAQ'; Url = 'https://learn.microsoft.com/en-us/lifecycle/faq/windows' }
+        )
     }
     'logging' = @{
         Titel = 'Logging auf Domain Controller(n)'; Schwere = 'Mittel'
         Zweck = 'Prüft Status des Eventlog-Dienstes und die Audit-Richtlinien der DCs. Ohne aktiviertes Auditing fehlen die Spuren, mit denen Angriffe überhaupt erkannt werden können.'
         Beispiel = 'Ist "Audit Kerberos Service Ticket Operations" deaktiviert, bleibt Kerberoasting unsichtbar. Ohne Anmelde-Auditing lassen sich Brute-Force-/Spraying-Angriffe nicht nachweisen.'
         Empfehlung = 'Advanced Audit Policy gemäß Microsoft-/CIS-Empfehlung konfigurieren (Anmeldungen, Kontenverwaltung, Verzeichnisdienstzugriff); Logs zentral in ein SIEM sammeln.'
-        Quellen = 'Microsoft - Audit Policy Recommendations; CIS Microsoft Windows Server Benchmark'
+        Hintergrund = 'Windows kennt klassische und "Advanced Audit Policy"-Kategorien. Auf DCs sind besonders relevant: Account Logon (Kerberos-/Credential-Validierung), Account Management (Gruppen-/Kontoänderungen) und DS Access (Verzeichnisdienstzugriff/-änderungen). Microsofts Baseline empfiehlt u. a. "Audit Kerberos Service Ticket Operations" und Directory-Service-Access auf DCs - ohne diese fehlen die Events (z. B. 4769, 4624, 4672, 4964), auf die SIEM-Erkennung aufsetzt.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - System Audit Policy recommendations'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/audit-policy-recommendations' }
+        )
     }
     'trusts' = @{
         Titel = 'AD-Trusts'; Schwere = 'Mittel'
         Zweck = 'Wertet Vertrauensstellungen zu anderen Domänen/Forests aus: Richtung, Transitivität und SID-Filtering. Trusts sind potenzielle Angriffspfade über Domänengrenzen hinweg.'
         Beispiel = 'Fehlt bei einem Forest-Trust das SID-Filtering, kann ein Angreifer aus der vertrauten Domäne per SID-History Rechte in der eigenen Domäne erlangen (cross-forest privilege escalation).'
         Empfehlung = 'Nicht mehr benötigte Trusts entfernen; SID-Filtering/Quarantine für externe Trusts aktiviert lassen; selektive Authentifizierung prüfen.'
-        Quellen = 'Microsoft - Security considerations for trusts; MITRE ATT&CK T1482 (Domain Trust Discovery)'
+        Hintergrund = 'Eine Vertrauensstellung erlaubt Konten einer Domäne, sich in einer anderen zu authentifizieren. Richtung (ein-/zweiseitig) und Transitivität bestimmen die Reichweite. SID-Filtering (Quarantine) verhindert, dass aus einer vertrauten Domäne gefälschte SID-History-Einträge privilegierte SIDs der eigenen Domäne einschleusen - fehlt es bei einem externen/Forest-Trust, ist eine domänenübergreifende Rechteausweitung möglich.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1482 - Domain Trust Discovery'; Url = 'https://attack.mitre.org/techniques/T1482/' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'dns' = @{
         Titel = 'DNS'; Schwere = 'Niedrig'
         Zweck = 'Prüft DNS-Server-Einstellungen der DCs: Aging/Scavenging (Bereinigung veralteter Einträge), Forwarder und Zonenkonfiguration. Sauberes DNS ist Voraussetzung für Replikation und Anmeldung.'
         Beispiel = 'Ohne Scavenging sammeln sich veraltete Host-Einträge an; ein neuer Host kann die IP eines alten Eintrags erhalten und wird dadurch falsch aufgelöst.'
         Empfehlung = 'Aging/Scavenging mit sinnvollen Intervallen aktivieren; nur vertrauenswürdige Forwarder konfigurieren; veraltete Zonen bereinigen.'
-        Quellen = 'Microsoft Learn - DNS aging and scavenging'
+        Hintergrund = 'AD-integriertes DNS speichert dynamisch registrierte Einträge mit Zeitstempel. Aging/Scavenging löscht Einträge, deren Zeitstempel älter als No-Refresh- plus Refresh-Intervall ist. Scavenging muss an drei Stellen aktiv sein (Eintrag, Zone, mindestens ein Server) und ist standardmäßig deaktiviert. Ohne Scavenging sammeln sich veraltete Einträge; eine neu vergebene IP kann auf einen alten Namen verweisen (Fehlauflösung, potenziell Spoofing).'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - DNS Aging and Scavenging in Windows Server'; Url = 'https://learn.microsoft.com/en-us/windows-server/networking/dns/aging-scavenging' }
+        )
     }
     'sysvol_health' = @{
         Titel = 'Sysvol Replication & AD-Health'; Schwere = 'Mittel'
         Zweck = 'Prüft die SYSVOL-Replikation (DFS-R statt des veralteten FRS) und die AD-Replikationsgesundheit. SYSVOL trägt Gruppenrichtlinien und Anmeldeskripte - Replikationsfehler führen zu uneinheitlichen Richtlinien.'
         Beispiel = 'Repliziert SYSVOL noch über FRS, ist die Umgebung nicht migriert und auf modernen DCs nicht mehr unterstützt; GPO-Änderungen kommen evtl. nicht auf allen DCs an.'
         Empfehlung = 'Von FRS auf DFS-R migrieren (falls noch nicht geschehen); Replikationsfehler (repadmin) regelmäßig prüfen und beheben.'
-        Quellen = 'Microsoft - SYSVOL Replication Migration (FRS to DFSR)'
+        Hintergrund = 'SYSVOL ist die replizierte Freigabe mit GPO-Dateien und Anmeldeskripten. Die Replikation erfolgt über FRS (veraltet, fehleranfällig) oder DFS-R (ab Funktionsebene 2008). Windows Server 2016 ist die letzte Version mit FRS-Unterstützung; die Migration FRS->DFS-R ist eine Einbahnstraße. Replikationsfehler führen dazu, dass GPO-Änderungen nicht auf allen DCs ankommen - Richtlinien wirken dann uneinheitlich.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Migrate SYSVOL replication from FRS to DFS Replication'; Url = 'https://learn.microsoft.com/en-us/windows-server/storage/dfs-replication/migrate-sysvol-to-dfsr' }
+        )
     }
     'admins' = @{
         Titel = 'Administratoren und Builtin Benutzer'; Schwere = 'Hoch'
         Zweck = 'Wertet hochprivilegierte Gruppen aus (Domain/Enterprise/Schema Admins, Administratoren, Builtin-Konten, Konten mit AdminCount=1). Diese Konten sind das primäre Ziel jedes Angreifers.'
         Beispiel = 'Ein vergessenes Dienstkonto in "Domain Admins" mit schwachem Passwort genügt, um die gesamte Domäne zu übernehmen. Je mehr Mitglieder, desto größer die Angriffsfläche.'
         Empfehlung = 'Mitgliederzahl privilegierter Gruppen minimieren (Tier-0-Modell); Enterprise/Schema Admins im Normalbetrieb leer halten; dedizierte Admin-Konten, kein Tagesgeschäft mit Admin-Rechten.'
-        Quellen = 'Microsoft - Securing Privileged Access; Microsoft - Protected Accounts and Groups in AD'
+        Hintergrund = 'Bestimmte Gruppen (Enterprise/Schema/Domain Admins, Administrators, Account/Backup/Server/Print Operators u. a.) sind "protected": Der SDProp-Prozess gleicht ihre ACL alle 60 Minuten gegen das AdminSDHolder-Objekt ab und setzt Abweichungen zurück; Konten dieser Gruppen tragen AdminCount=1 und erben keine Vererbung. Diese Konten sind das primäre Ziel für Credential-Theft - ihre Anzahl sollte minimal sein (Tier-0-Modell).'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Appendix C: Protected Accounts and Groups in Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'benutzer' = @{
         Titel = 'Benutzer und Benutzer Accounts'; Schwere = 'Mittel'
         Zweck = 'Untersucht Benutzerkonten auf inaktive, gesperrte und falsch platzierte Konten (Standard-OU "Users"). Verwaiste Konten sind unbeaufsichtigte Einfallstore.'
         Beispiel = 'Ein seit zwei Jahren inaktives, aber aktiviertes Konto eines ausgeschiedenen Mitarbeiters lässt sich übernehmen, ohne dass es auffällt.'
         Empfehlung = 'Inaktive Konten deaktivieren und nach Frist löschen; Konten in passende OUs strukturieren; Joiner-/Mover-/Leaver-Prozess etablieren.'
-        Quellen = 'Microsoft - Active Directory account management best practices'
+        Hintergrund = 'Verwaiste, inaktive oder falsch platzierte Benutzerkonten vergrößern die Angriffsfläche, ohne Nutzen zu stiften. Inaktive, aber aktivierte Konten (lastLogonTimestamp lange her) sind unbeaufsichtigte Anmeldeziele - besonders, wenn ihr Passwort nie geändert wurde. Ein sauberer Joiner-/Mover-/Leaver-Prozess und regelmäßige Rezertifizierung halten den Bestand aktuell.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'computerkonten' = @{
         Titel = 'Computerkonten'; Schwere = 'Info'
         Zweck = 'Erfasst die Computerkonten der Domäne. Liefert den Bestand und hilft, verwaiste oder veraltete Maschinenkonten zu erkennen.'
         Beispiel = 'Ein Computerkonto ohne jüngste Anmeldung deutet auf ein ausgemustertes Gerät hin, dessen Konto noch missbraucht werden könnte.'
         Empfehlung = 'Veraltete Computerkonten regelmäßig identifizieren und entfernen.'
-        Quellen = 'Microsoft - Active Directory maintenance best practices'
+        Hintergrund = 'Computerkonten authentifizieren Maschinen gegen AD; ihr Passwort wird normalerweise alle 30 Tage automatisch erneuert. Konten ohne jüngste Anmeldung deuten auf ausgemusterte Geräte hin und sollten entfernt werden. Selbst angelegte Computerkonten sind zudem Baustein von RBCD- und noPac-Angriffen (siehe Computerkonten-Kontingent/MachineAccountQuota im Kerberos-Bereich).'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'clients' = @{
         Titel = 'Client Check'; Schwere = 'Niedrig'
         Zweck = 'Listet Client-Betriebssysteme und prüft, ob sie noch vom Hersteller unterstützt werden. Nicht unterstützte Systeme erhalten keine Sicherheitsupdates.'
         Beispiel = 'Ein verbliebenes Windows 7 oder ausgelaufenes Windows 10 ist über bekannte, ungepatchte Lücken angreifbar und kann als Sprungbrett dienen.'
         Empfehlung = 'Nicht unterstützte Clients ausmustern oder isolieren; Patch-Management sicherstellen.'
-        Quellen = 'Microsoft - Windows lifecycle fact sheet'
+        Hintergrund = 'Microsoft-Betriebssysteme folgen einem festen Lebenszyklus; nach dem End-of-Support gibt es keine Sicherheitsupdates mehr (außer kostenpflichtige Extended Security Updates). Windows 10 erreicht z. B. am 14.10.2025 das Support-Ende. Nicht mehr unterstützte Clients sind über bekannte, ungepatchte Lücken angreifbar und eignen sich als Einstiegs- und Sprungbrett-Systeme im Netz.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Lifecycle - Windows Lifecycle FAQ'; Url = 'https://learn.microsoft.com/en-us/lifecycle/faq/windows' }
+        )
     }
     'server' = @{
         Titel = 'Server Check'; Schwere = 'Niedrig'
         Zweck = 'Listet Server-Betriebssysteme und deren Support-Status. Wie bei Clients sind nicht unterstützte Server ein erhöhtes Risiko.'
         Beispiel = 'Ein Windows Server 2008 R2 ohne ESU ist dauerhaft verwundbar; fällt er, können darauf gespeicherte Anmeldedaten den Angriff ausweiten.'
         Empfehlung = 'Server auf unterstützte Versionen heben; Altsysteme isolieren; Patch-Stand überwachen.'
-        Quellen = 'Microsoft - Windows Server lifecycle'
+        Hintergrund = 'Wie Clients folgen Server-Betriebssysteme dem Microsoft-Lebenszyklus. Ein nicht mehr unterstützter Server (z. B. Windows Server 2008 R2 ohne ESU) bleibt dauerhaft verwundbar; wird er kompromittiert, lassen sich darauf zwischengespeicherte Anmeldedaten für laterale Bewegung nutzen. Welche Server-Versionen als DC zulässig sind, hängt zusätzlich an der Funktionsebene.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Lifecycle - Windows Lifecycle FAQ'; Url = 'https://learn.microsoft.com/en-us/lifecycle/faq/windows' }
+            @{ Titel = 'Microsoft Learn - Active Directory Domain Services Functional Levels'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/active-directory-functional-levels' }
+        )
     }
     'nicht_windows' = @{
         Titel = 'Nicht-Windows-Systeme'; Schwere = 'Info'
         Zweck = 'Erfasst in der Domäne registrierte Nicht-Windows-Systeme. Schafft Transparenz über heterogene Geräte (Linux, Appliances), die ebenfalls Konten besitzen.'
         Beispiel = 'Ein an die Domäne angebundenes Linux-System mit veralteter Konfiguration kann eigene Schwachstellen einbringen.'
         Empfehlung = 'Nicht-Windows-Beitritte dokumentieren und in das Patch-/Härtungskonzept einbeziehen.'
-        Quellen = 'Allgemeine Härtungs-Empfehlungen (herstellerabhängig)'
+        Hintergrund = 'Auch Nicht-Windows-Systeme (Linux, Appliances, NAS) können der Domäne beitreten und besitzen dann AD-Konten. Sie unterliegen nicht dem Windows-Patch-/Härtungsprozess und bringen eigene Schwachstellen mit; Transparenz über solche Systeme ist Voraussetzung für ein vollständiges Härtungs- und Monitoring-Konzept.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'ad_gruppen' = @{
         Titel = 'AD-Gruppen'; Schwere = 'Niedrig'
         Zweck = 'Wertet AD-Gruppen aus (Anzahl, Typ, leere oder verschachtelte Gruppen). Unübersichtliche Gruppenstrukturen führen zu schleichender Rechteanhäufung.'
         Beispiel = 'Tief verschachtelte Gruppen verschleiern, wer am Ende welche Rechte hat - so entstehen ungewollte Berechtigungen.'
         Empfehlung = 'Gruppenmodell aufräumen (z. B. AGDLP), leere/verwaiste Gruppen entfernen, Verschachtelung begrenzen, regelmäßig rezertifizieren.'
-        Quellen = 'Microsoft - Group scope and nesting best practices'
+        Hintergrund = 'AD kennt Gruppen-Geltungsbereiche (lokal in Domäne, global, universal) und erlaubt Verschachtelung. Tiefe Verschachtelung verschleiert die effektiven Rechte ("wer ist letztlich Mitglied?") und führt zu schleichender Rechteanhäufung. Das AGDLP-Prinzip (Accounts -> Global -> Domain Local -> Permission) hält die Berechtigungsvergabe nachvollziehbar.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Active Directory Security Groups (scope and nesting)'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups' }
+        )
     }
     'gpos' = @{
         Titel = 'GPOs'; Schwere = 'Mittel'
         Zweck = 'Erfasst die Gruppenrichtlinienobjekte (GPOs), u. a. nicht verknüpfte oder leere GPOs und die Domänen-Standardrichtlinien. GPOs steuern zentrale Sicherheitseinstellungen.'
         Beispiel = 'Eine GPO, deren Bearbeitungsrecht an eine breite Gruppe vergeben ist, erlaubt Angreifern, über die GPO Code auf vielen Systemen auszuführen.'
         Empfehlung = 'Nicht verknüpfte/leere GPOs entfernen; GPO-Bearbeitungsrechte streng begrenzen; Änderungen versionieren und dokumentieren.'
-        Quellen = 'Microsoft - Group Policy security best practices; MITRE ATT&CK T1484 (Domain Policy Modification)'
+        Hintergrund = 'GPOs steuern zentrale Sicherheits- und Systemeinstellungen und werden über SYSVOL verteilt. Wer eine verknüpfte GPO bearbeiten darf, kann auf allen davon erfassten Systemen Einstellungen oder Skripte ausrollen - daher ist die Delegation der GPO-Bearbeitung sicherheitskritisch (MITRE T1484: Domain or Tenant Policy Modification). Nicht verknüpfte oder leere GPOs sind meist Altlasten und sollten entfernt werden.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1484 - Domain or Tenant Policy Modification'; Url = 'https://attack.mitre.org/techniques/T1484/' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'ddp_password' = @{
         Titel = 'dDP Password Settings'; Schwere = 'Hoch'
         Zweck = 'Prüft die Default Domain Password Policy (Mindestlänge, Komplexität, Historie, Sperrschwelle). Diese Richtlinie bestimmt die Grundsicherheit aller Domänenpasswörter.'
         Beispiel = 'Eine Mindestlänge von 7 Zeichen ohne Sperrschwelle ermöglicht praktikable Brute-Force- und Password-Spraying-Angriffe.'
-        Empfehlung = 'Mindestens 14 Zeichen, Sperrschwelle setzen, gegen bekannte/kompromittierte Passwörter prüfen (z. B. Azure AD Password Protection oder gleichwertig).'
-        Quellen = 'Microsoft - Password policy recommendations; NIST SP 800-63B; CIS Benchmark'
+        Empfehlung = 'Mindestens 14 Zeichen, Sperrschwelle setzen (Microsoft-Baseline empfiehlt 10), gegen bekannte/kompromittierte Passwörter prüfen (z. B. Azure AD Password Protection); statt erzwungenem periodischem Wechsel auf längere Passphrasen setzen (NIST SP 800-63B).'
+        Hintergrund = 'Die Default Domain Password Policy gilt domänenweit für alle Konten ohne abweichende fGPP. Mindestlänge (in der GUI max. 14), Komplexität, Historie und Sperrschwelle bestimmen den Brute-Force-/Spraying-Widerstand. Eine fehlende oder zu hohe Sperrschwelle macht Password-Spraying praktikabel; eine zu niedrige begünstigt DoS durch Aussperren. Microsofts Security-Baseline nennt als Richtwert eine Sperrschwelle von 10.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Minimum password length (Security policy setting)'; Url = 'https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/minimum-password-length' }
+        )
     }
     'fgpp' = @{
         Titel = 'Fine Grained Password Policies'; Schwere = 'Mittel'
         Zweck = 'Wertet Fine-Grained Password Policies (PSOs) aus, mit denen abweichende Passwortrichtlinien für einzelne Gruppen/Konten gelten - wichtig vor allem für privilegierte und Dienstkonten.'
         Beispiel = 'Fehlt eine strengere Richtlinie für Administratoren oder Dienstkonten, gilt für sie nur die oft schwächere Standardrichtlinie.'
         Empfehlung = 'Für privilegierte Konten und Dienstkonten strengere PSOs definieren (länger, häufigerer Wechsel bzw. gMSA).'
-        Quellen = 'Microsoft Learn - Fine-Grained Password Policies'
+        Hintergrund = 'Fine-Grained Password Policies (Password Settings Objects, PSOs) erlauben abweichende Passwort-/Sperr-Richtlinien für einzelne globale Sicherheitsgruppen oder Benutzer - zusätzlich zur Default Domain Password Policy. Bei mehreren zutreffenden PSOs gewinnt die mit der niedrigsten Precedence. PSOs greifen nur auf Gruppen/Benutzer, nicht direkt auf OUs. Damit lassen sich für Admins und Dienstkonten strengere Vorgaben durchsetzen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Configure fine grained password policies for AD DS'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/get-started/adac/fine-grained-password-policies' }
+        )
     }
     'user_vs_pw' = @{
         Titel = 'User vs Password Policies'; Schwere = 'Mittel'
         Zweck = 'Gleicht Benutzerkonten gegen passwortbezogene Risikomerkmale ab, u. a. "Passwort läuft nie ab" und "Passwort nicht erforderlich". Solche Konten unterlaufen die Passwortrichtlinie.'
         Beispiel = 'Ein Konto mit "Password never expires" und schwachem Passwort bleibt dauerhaft angreifbar; "Password not required" erlaubt im Extremfall ein leeres Passwort.'
         Empfehlung = 'Flags PASSWD_NOTREQD und DONT_EXPIRE_PASSWORD prüfen und entfernen (Ausnahmen nur für gMSA/begründete Fälle).'
-        Quellen = 'Microsoft - userAccountControl flags; Microsoft - account security best practices'
+        Hintergrund = 'Im Attribut userAccountControl stecken Risiko-Flags: DONT_EXPIRE_PASSWORD (0x10000) - das Passwort läuft nie ab; PASSWD_NOTREQD (0x20) - kein Passwort erforderlich (im Extremfall leer). Solche Konten unterlaufen die Passwortrichtlinie und bleiben dauerhaft angreifbar. Ausnahmen sind nur für (g)MSA bzw. begründete technische Fälle vertretbar.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - UserAccountControl property flags'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'ous' = @{
         Titel = 'Organisation Units'; Schwere = 'Info'
         Zweck = 'Stellt die OU-Struktur dar und prüft optional den Schutz vor versehentlichem Löschen. Eine saubere OU-Struktur ist Basis für gezielte GPO-Verknüpfung und Delegation.'
         Beispiel = 'Eine flache oder chaotische OU-Struktur erschwert das Tiering und führt dazu, dass GPOs zu breit greifen.'
         Empfehlung = 'OU-Struktur an Verwaltung/Tiering ausrichten; Schutz vor versehentlichem Löschen aktivieren; Delegationen dokumentieren.'
-        Quellen = 'Microsoft - Designing the OU structure'
+        Hintergrund = 'Organisationseinheiten strukturieren AD-Objekte für gezielte GPO-Verknüpfung und delegierte Verwaltung. Eine an Tiering/Verwaltung ausgerichtete OU-Struktur verhindert, dass GPOs zu breit greifen, und ermöglicht eine least-privilege-Delegation. Der Schutz "vor versehentlichem Löschen" (ProtectedFromAccidentalDeletion) verhindert das versehentliche Entfernen ganzer Teilbäume.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
     }
     'msa' = @{
         Titel = 'Managed Service Accounts (MSA/gMSA)'; Schwere = 'Niedrig'
         Zweck = 'Prüft (group) Managed Service Accounts und den KDS-Root-Key. (g)MSA bieten automatisch verwaltete, sehr lange Passwörter und sind die sichere Alternative zu klassischen Dienstkonten.'
         Beispiel = 'Laufen Dienste noch unter klassischen Konten mit fixem Passwort und SPN, sind sie Kerberoasting-fähig - ein gMSA wäre dagegen praktisch nicht knackbar.'
         Empfehlung = 'Dienste auf gMSA umstellen; KDS-Root-Key bereitstellen; klassische Dienstkonten ablösen.'
-        Quellen = 'Microsoft Learn - Group Managed Service Accounts Overview'
+        Hintergrund = 'Ein gMSA ist ein automatisch verwaltetes Domänenkonto: Der Schlüssel wird vom Microsoft Key Distribution Service (KDS, kdssvc.dll) aus einem KDS-Root-Key abgeleitet, das Passwort (sehr lang, regelmäßig rotiert) verwalten die DCs selbst; Member-Server holen es bei Bedarf ab. Damit entfällt die manuelle Passwortpflege, und Kerberoasting wird praktisch wirkungslos. Voraussetzung ist ein bereitgestellter KDS-Root-Key.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Group Managed Service Accounts overview'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/group-managed-service-accounts/group-managed-service-accounts/group-managed-service-accounts-overview' }
+        )
     }
     'ca' = @{
         Titel = 'Zertifizierungsstelle(n)'; Schwere = 'Mittel'
         Zweck = 'Erfasst die Zertifizierungsstellen (Root/Sub-CA) der Umgebung (AD CS). Die PKI ist sicherheitskritisch: Wer Zertifikate ausstellen kann, kann sich als beliebiger Benutzer ausgeben.'
         Beispiel = 'Eine falsch konfigurierte Vorlage kann es jedem Benutzer erlauben, ein Anmeldezertifikat für einen Administrator zu beantragen (ESC1) - die Detailprüfung erfolgt im AD-CS-Sicherheitscheck.'
         Empfehlung = 'CA-Rollen und Vorlagen regelmäßig auf Fehlkonfigurationen prüfen (ESC1-ESC8); Ausstellungsrechte streng begrenzen.'
-        Quellen = 'SpecterOps - Certified Pre-Owned; Microsoft - AD CS security'
+        Hintergrund = 'AD Certificate Services (AD CS) stellt Zertifikate aus, u. a. für die Anmeldung (Client Authentication). Ist eine Vorlage falsch konfiguriert - etwa der Antragsteller liefert den Subject selbst (ENROLLEE_SUPPLIES_SUBJECT) plus Client-Authentication plus breite Enroll-Rechte -, kann ein normaler Benutzer ein Zertifikat auf einen Administrator ausstellen und sich damit anmelden. SpecterOps fasst diese Eskalationsklassen als ESC1-ESC8 zusammen; die Detailprüfung der Vorlagen ist für ein eigenes AD-CS-Paket vorgesehen.'
+        Quellen = @(
+            @{ Titel = 'SpecterOps (Schroeder/Christensen) - Certified Pre-Owned: Abusing AD CS'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
+        )
     }
     'dc_detail' = @{
         Titel = 'Domain Controller (Detailprüfung)'; Schwere = 'Mittel'
         Zweck = 'Führt pro Domänencontroller Detailprüfungen durch (Dienste, Rollen, Features, LDAPS, NTLM, SMB1, BitLocker, ExecutionPolicy). Der DC ist das Herz der Domäne; seine Härtung ist entscheidend.'
         Beispiel = 'Ist SMB1 auf einem DC noch aktiv, ist er über längst bekannte Lücken (z. B. EternalBlue) angreifbar; fehlendes LDAPS erlaubt das Mitlesen von Verzeichnisanfragen.'
         Empfehlung = 'SMB1 entfernen, LDAPS/LDAP-Signing erzwingen, NTLM einschränken, DCs nach CIS-/Microsoft-Baseline härten.'
-        Quellen = 'Microsoft Security Baselines; CIS Microsoft Windows Server Benchmark'
+        Hintergrund = 'Die DC-Detailprüfung betrachtet je DC Dienste, Rollen, Features und Härtungsindikatoren: SMB1 (veraltet, EternalBlue-Angriffsfläche), LDAPS/LDAP-Signing (Schutz gegen Mitlesen und NTLM-Relay), NTLM-Stufe (lmcompatibilitylevel), BitLocker und PowerShell-ExecutionPolicy. Microsofts Security Baselines (Security Compliance Toolkit) und CIS-Benchmarks liefern dafür geprüfte Soll-Werte als GPO-Pakete.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Windows security baselines guide'; Url = 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/device-management/windows-security-configuration-framework/windows-security-baselines' }
+            @{ Titel = 'Microsoft Learn - Microsoft Security Compliance Toolkit'; Url = 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/device-management/windows-security-configuration-framework/security-compliance-toolkit-10' }
+        )
     }
     'kerberos' = @{
         Titel = 'Kerberos - Angriffsflächen'; Schwere = 'Hoch'

@@ -123,6 +123,18 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Doku-Tiefe für die 22 Inventar-Checks" (Juni 2026):**
+- Alle 22 Inventar-/Bestands-Checks auf Paket-A-Niveau gehoben: je ein Feld `Hintergrund`
+  (Technik/Protokoll/Schwachstelle) und `Quellen` als Liste **live-verifizierter** Links.
+- Damit haben jetzt **alle 28 Katalogeinträge** Hintergrund + Link-Quellen (45 HTTPS-Links).
+- Jeder Link per WebFetch/WebSearch geprüft (erreichbar + Inhalt passend), u. a.: Microsoft
+  Learn (Functional Levels, Central Store, Audit Policy, SYSVOL FRS→DFSR, Protected Accounts/
+  AdminSDHolder, Security Groups, DNS Scavenging, gMSA, FGPP, Min Password Length, Security
+  Baselines/SCT, Lifecycle FAQ, UserAccountControl), MITRE ATT&CK T1482/T1484, SpecterOps
+  „Certified Pre-Owned".
+- Testsuite auf 65 Tests: ein Test verlangt jetzt für **jeden** Katalogeintrag Hintergrund +
+  HTTPS-Quell-Links mit Titel.
+
 **Bugfix „srv_chk Zählung" (Juni 2026):**
 - Server Check brach im echten DC-Lauf ab: `op_Subtraction` auf `ADPropertyValueCollection`.
   Ursache: `(Get-ADComputer … | Where-Object …).count` liefert bei **genau einem** Treffer

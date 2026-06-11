@@ -507,12 +507,25 @@ Describe 'Analyse_V4_6.ps1' {
             }
         }
 
+        It 'jeder Katalog-Eintrag hat einen Hintergrund und HTTPS-Quell-Links mit Titel' {
+            foreach ($id in $global:CheckKatalog.Keys) {
+                $k = $global:CheckKatalog[$id]
+                [string]::IsNullOrWhiteSpace($k.Hintergrund) | Should -BeFalse -Because "$id braucht Hintergrund"
+                $k.Quellen -is [string] | Should -BeFalse -Because "$id Quellen muss eine Link-Liste sein"
+                @($k.Quellen).Count | Should -BeGreaterThan 0 -Because "$id ohne Quelle"
+                foreach ($l in @($k.Quellen)) {
+                    $l.Titel | Should -Not -BeNullOrEmpty -Because "$id Quelle ohne Titel"
+                    $l.Url   | Should -Match '^https://' -Because "$id Quelle muss HTTPS-Link sein"
+                }
+            }
+        }
+
         It 'Katalog-Texte verwenden echte Umlaute (nicht transliteriert)' {
             $ae = [char]0x00E4   # ae
             $global:CheckKatalog['domain_allgemein'].Zweck | Should -Match $ae
             $global:CheckKatalog['kerberos'].Titel | Should -Match ('Angriffsfl' + $ae + 'chen')
-            # Quellen duerfen nicht faelschlich umgewandelt sein
-            $global:CheckKatalog['domain_allgemein'].Quellen | Should -Match 'Quellen|Microsoft'
+            # Quellen sind jetzt Link-Listen: Titel des ersten Links pruefen
+            @($global:CheckKatalog['domain_allgemein'].Quellen)[0].Titel | Should -Match 'Microsoft'
         }
 
         It 'jeder Pruefbereich-Aufruf im Hauptablauf traegt eine -CheckId' {
