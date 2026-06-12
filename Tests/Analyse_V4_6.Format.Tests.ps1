@@ -34,7 +34,8 @@ Describe 'Analyse_V4_6.ps1' {
                             'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
                             'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                             'Ausgabe','Puffer_leeren','Entschluessle-GPP',
-                            'Merken','Doku','Farbklasse','HTML_Report','JSON_Export')
+                            'Merken','Doku','Farbklasse','HTML_Report','JSON_Export',
+                            'Extrahiere-Befunde','chk_delta')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
         }, $true) | Where-Object { $zielFunktionen -contains $_.Name }
@@ -92,7 +93,8 @@ Describe 'Analyse_V4_6.ps1' {
                          'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
                          'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                          'Ausgabe','Puffer_leeren','Entschluessle-GPP',
-                         'Merken','Doku','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen')) {
+                         'Merken','Doku','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen',
+                         'Extrahiere-Befunde','chk_delta')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
         foreach ($v in @('sb','zeichen','tabzeichen','tabtrenner','leer','type','maintitel',
@@ -816,6 +818,98 @@ Describe 'Analyse_V4_6.ps1' {
 
         It 'der Schalter dchaert steht in der Override-Whitelist' {
             (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match "'dchaert'"
+        }
+    }
+
+    Context 'Paket F (v5.0): Delta-Modus' {
+
+        It 'Katalog enthaelt den Delta-Eintrag' {
+            $global:CheckKatalog.Keys | Should -Contain 'delta'
+        }
+
+        It 'der Delta-Eintrag ist als Info eingestuft' {
+            $global:CheckKatalog['delta'].Schwere | Should -Be 'Info'
+        }
+
+        It 'die Delta-Funktionen sind im Skript definiert' {
+            $funktionen = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
+            }, $true) | ForEach-Object { $_.Name }
+            foreach ($fn in 'Extrahiere-Befunde','chk_delta') {
+                $funktionen | Should -Contain $fn
+            }
+        }
+
+        It 'der Schalter deltchk steht in der Override-Whitelist' {
+            (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match "'deltchk'"
+        }
+
+        It 'der Parameter -Vergleich ist deklariert' {
+            (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match '\[string\]\$Vergleich'
+        }
+
+        It 'Extrahiere-Befunde erfasst nur rot/gelb markierte Wert-Eintraege' {
+            $evs = @(
+                [pscustomobject]@{ Art='Wert';    Name='R'; Wert='1'; Farbe='Red' }
+                [pscustomobject]@{ Art='Wert';    Name='Y'; Wert='2'; Farbe='Yellow' }
+                [pscustomobject]@{ Art='Wert';    Name='G'; Wert='3'; Farbe='Green' }
+                [pscustomobject]@{ Art='Bereich'; Name='B'; Wert='';  Farbe='Red' }
+            )
+            $set = Extrahiere-Befunde $evs
+            $set.Count | Should -Be 2
+            $set.ContainsKey('R | 1') | Should -BeTrue
+            $set.ContainsKey('Y | 2') | Should -BeTrue
+            $set.ContainsKey('G | 3') | Should -BeFalse
+        }
+
+        It 'Extrahiere-Befunde ignoriert eigene Delta-Artefakte frueherer Laeufe' {
+            $evs = @(
+                [pscustomobject]@{ Art='Wert'; Name='  + Alt-Befund';      Wert=''; Farbe='Red' }
+                [pscustomobject]@{ Art='Wert'; Name='Neu hinzugekommen:';  Wert='3'; Farbe='Red' }
+                [pscustomobject]@{ Art='Wert'; Name='Echter Befund';       Wert='x'; Farbe='Red' }
+            )
+            $set = Extrahiere-Befunde $evs
+            $set.Count | Should -Be 1
+            $set.ContainsKey('Echter Befund | x') | Should -BeTrue
+        }
+
+        It 'chk_delta erkennt neue und behobene Befunde gegenueber einem alten JSON-Export' {
+            # Aktueller Lauf: Befund A (bleibt) + Befund NEU; Gruen ist kein Befund.
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Wert'; Name='Befund A';   Wert='x';  Farbe='Red' })
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Wert'; Name='Befund NEU'; Wert='y';  Farbe='Red' })
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Wert'; Name='Gruen';      Wert='ok'; Farbe='Green' })
+
+            # Alter Export: Befund A (bleibt) + Befund ALT (behoben).
+            $tmp = Join-Path ([IO.Path]::GetTempPath()) 'ad_delta_old.json'
+            $altObj = [pscustomobject]@{ Ereignisse = @(
+                [pscustomobject]@{ Art='Wert'; Name='Befund A';   Wert='x'; Farbe='Red' }
+                [pscustomobject]@{ Art='Wert'; Name='Befund ALT'; Wert='z'; Farbe='Yellow' }
+            )}
+            $altObj | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $tmp -Encoding UTF8
+
+            try {
+                chk_delta $tmp
+
+                $neuEv = $global:R_Daten | Where-Object { $_.Name -eq 'Neu hinzugekommen:' }
+                $neuEv.Wert | Should -Be '1'
+                ($global:R_Daten | Where-Object { "$($_.Name)" -match '\+\s*Befund NEU' }) |
+                    Should -Not -BeNullOrEmpty
+
+                $behEv = $global:R_Daten | Where-Object { $_.Name -eq 'Behoben (nicht mehr vorhanden):' }
+                $behEv.Wert | Should -Be '1'
+                ($global:R_Daten | Where-Object { "$($_.Name)" -match '\-\s*Befund ALT' }) |
+                    Should -Not -BeNullOrEmpty
+            } finally {
+                Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        It 'chk_delta meldet eine fehlende Vergleichsdatei freundlich' {
+            $fehlt = Join-Path ([IO.Path]::GetTempPath()) 'gibt_es_nicht_12345.json'
+            chk_delta $fehlt
+            ($global:R_Daten | Where-Object {
+                $_.Name -eq 'Vergleichsdatei:' -and "$($_.Wert)" -match 'nicht gefunden'
+            }) | Should -Not -BeNullOrEmpty
         }
     }
 
