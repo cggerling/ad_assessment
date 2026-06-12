@@ -797,6 +797,28 @@ Describe 'Analyse_V4_6.ps1' {
         }
     }
 
+    Context 'Paket E (v5.0): DC-Härtung vertieft' {
+
+        It 'Katalog enthaelt alle Paket-E-Eintraege' {
+            foreach ($id in 'dc_haertung','ldap_signing','smb_signing','print_spooler','anon_ldap') {
+                $global:CheckKatalog.Keys | Should -Contain $id
+            }
+        }
+
+        It 'die Paket-E-Prueffunktionen sind im Skript definiert' {
+            $funktionen = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
+            }, $true) | ForEach-Object { $_.Name }
+            foreach ($fn in 'chk_ldap_signing','chk_smb_signing','chk_print_spooler','chk_anon_ldap') {
+                $funktionen | Should -Contain $fn
+            }
+        }
+
+        It 'der Schalter dchaert steht in der Override-Whitelist' {
+            (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match "'dchaert'"
+        }
+    }
+
     Context 'Gepufferte Datei-Ausgabe (Puffer)' {
 
         It 'Ausgaben landen erst mit Puffer_leeren in der Datei' {

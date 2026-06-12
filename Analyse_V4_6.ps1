@@ -171,6 +171,8 @@ $privchk = 1                                     # Privilegien-/ACL-Checks (Pake
 $adcschk = 1                                     # AD-CS-/ESC-Checks (Paket C)       (0=nein,1=ja) #
 # Sicherheit: GPO/SYSVOL-Geheimnisse (v5.0)      ###################################################
 $sysvchk = 1                                     # GPO/SYSVOL-Checks (Paket D)       (0=nein,1=ja) #
+# Sicherheit: DC-Haertung vertieft (v5.0)        ###################################################
+$dchaert = 1                                     # DC-Haertung-Checks (Paket E)      (0=nein,1=ja) #
 ####################################################################################################
 # Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
 ################################################################                                   #
@@ -184,7 +186,7 @@ if ($Bereiche) {                                 # Einzelne Schalter per Hashtab
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
                        'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
                        'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk',   #
-                       'privchk','adcschk','sysvchk')                                              #
+                       'privchk','adcschk','sysvchk','dchaert')                                    #
     foreach ($schalter in $Bereiche.Keys) {                                                        #
         if ($schalterListe -contains $schalter) {                                                  #
             Set-Variable -Name $schalter -Value ([int]$Bereiche[$schalter])                        #
@@ -734,6 +736,61 @@ $CheckKatalog = @{
         Empfehlung = 'GPO-Bearbeitungsrechte ausschließlich dedizierten GPO-Administratoren gewähren; breite Gruppen entfernen; Änderungen überwachen.'
         Quellen = @(
             @{ Titel = 'MITRE ATT&CK T1484.001 - Group Policy Modification'; Url = 'https://attack.mitre.org/techniques/T1484/001/' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'dc_haertung' = @{
+        Titel = 'DC-Härtung (vertieft)'; Schwere = 'Hoch'
+        Zweck = 'Vertieft die DC-Härtung über die Basis-Checks hinaus: LDAP-Signing & Channel Binding, erzwungenes SMB-Signing, Print Spooler auf DCs und anonyme LDAP-Binds.'
+        Hintergrund = 'Domänencontroller sind Tier-0-Systeme. Mehrere verbreitete Angriffe (NTLM-Relay auf LDAP/SMB, Zwang zur Authentifizierung via PrinterBug/PetitPotam) lassen sich durch wenige Härtungseinstellungen entschärfen. Diese Teilprüfungen lesen die relevanten Registry-Werte/Dienste je DC sowie das dSHeuristics-Attribut read-only aus.'
+        Beispiel = 'Ist LDAP-Signing nicht erzwungen und der Print Spooler aktiv, kann ein Angreifer einen DC via PrinterBug zur NTLM-Authentifizierung zwingen und diese an einen anderen DC relayen.'
+        Empfehlung = 'LDAP-Signing + Channel Binding erzwingen, SMB-Signing erforderlich setzen, Print Spooler auf DCs deaktivieren, anonyme LDAP-Binds unterbinden.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Windows security baselines'; Url = 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/device-management/windows-security-configuration-framework/windows-security-baselines' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'ldap_signing' = @{
+        Titel = 'LDAP-Signing & Channel Binding'; Schwere = 'Hoch'
+        Zweck = 'Liest je DC die Registry-Werte LDAPServerIntegrity (LDAP-Signing) und LdapEnforceChannelBinding (Channel Binding) aus.'
+        Hintergrund = 'Ohne erzwungenes LDAP-Signing akzeptiert der DC SASL-Binds ohne Integritätsschutz und einfache Binds über Klartext - anfällig für Replay- und Man-in-the-Middle-/Relay-Angriffe. LDAP Channel Binding (CBT) bindet die LDAPS-Authentifizierung an den TLS-Kanal und verhindert NTLM-Relay auf LDAPS. LDAPServerIntegrity=2 bedeutet "Signing erforderlich"; LdapEnforceChannelBinding=2 "immer".'
+        Beispiel = 'Ein Angreifer relayt die NTLM-Authentifizierung eines Computerkontos an den LDAP-Dienst eines DCs und trägt z. B. ein RBCD-Recht ein - ohne LDAP-Signing/CBT gelingt das.'
+        Empfehlung = 'LDAPServerIntegrity auf 2 (erforderlich) und LdapEnforceChannelBinding auf 2 (immer) setzen; vorab per Event 2887 Clients identifizieren, die ungesignt binden.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - How to enable LDAP signing'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/enable-ldap-signing-in-windows-server' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'smb_signing' = @{
+        Titel = 'SMB-Signing (erforderlich)'; Schwere = 'Mittel'
+        Zweck = 'Liest je DC den Registry-Wert RequireSecuritySignature (LanManServer) - ist SMB-Signing serverseitig erforderlich?'
+        Hintergrund = 'SMB-Signing versieht jede SMB-Nachricht mit einer Signatur (HMAC/AES) und verhindert so Manipulation und Relay-/Spoofing-Angriffe. DCs erzwingen Signing für SYSVOL/NETLOGON bereits standardmäßig; ein global nicht erzwungenes Signing (RequireSecuritySignature=0) lässt aber andere SMB-Verbindungen ungesignt und damit relay-fähig.'
+        Beispiel = 'Bei nicht erzwungenem SMB-Signing kann ein Angreifer eine SMB-Authentifizierung abfangen und an einen anderen Dienst weiterleiten.'
+        Empfehlung = 'RequireSecuritySignature serverseitig auf 1 setzen (GPO: "Microsoft network server: Digitally sign communications (always)").'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Overview of SMB signing'; Url = 'https://learn.microsoft.com/en-us/windows-server/storage/file-server/smb-signing-overview' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'print_spooler' = @{
+        Titel = 'Print Spooler auf DCs'; Schwere = 'Hoch'
+        Zweck = 'Prüft je DC, ob der Druckwarteschlangen-Dienst (Print Spooler) läuft.'
+        Hintergrund = 'Der Print Spooler stellt eine RPC-Schnittstelle (MS-RPRN) bereit, über die sich ein DC zwingen lässt, sich gegen ein anderes System zu authentifizieren (PrinterBug). Kombiniert mit NTLM-Relay (z. B. auf LDAP oder AD CS) führt das zur DC-/Domänenübernahme. Auf DCs wird der Spooler praktisch nie benötigt (MITRE T1187 Forced Authentication).'
+        Beispiel = 'Per PrinterBug zwingt der Angreifer DC-A, sich gegen seinen Relay-Server zu authentifizieren, und leitet diese Authentifizierung an die AD-CS-Web-Enrollment-Schnittstelle weiter (ESC8).'
+        Empfehlung = 'Print Spooler auf allen DCs deaktivieren (Set-Service Spooler -StartupType Disabled; Stop-Service Spooler), sofern nicht zwingend benötigt.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1187 - Forced Authentication'; Url = 'https://attack.mitre.org/techniques/T1187/' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'anon_ldap' = @{
+        Titel = 'Anonyme LDAP-Binds (dSHeuristics)'; Schwere = 'Mittel'
+        Zweck = 'Liest das dSHeuristics-Attribut aus und prüft, ob anonyme LDAP-Operationen erlaubt sind (7. Zeichen = 2).'
+        Hintergrund = 'Das forestweite Attribut dSHeuristics steuert diverse Verzeichnis-Verhalten. Steht das 7. Zeichen auf "2", sind anonyme (nicht authentifizierte) LDAP-Binds/-Suchen erlaubt - ein Angreifer kann dann ohne Konto Benutzer-, Gruppen- und Konfigurationsinformationen auslesen (Aufklärung). Standardmäßig ist das nicht gesetzt.'
+        Beispiel = 'Bei erlaubten anonymen Binds enumeriert ein Angreifer aus dem Netz ohne gültiges Konto die gesamte Benutzerliste.'
+        Empfehlung = 'Anonyme LDAP-Binds nicht erlauben (7. Zeichen von dSHeuristics nicht auf 2 setzen); falls für Altanwendungen nötig, eng begrenzen und überwachen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - How to enable LDAP signing'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/enable-ldap-signing-in-windows-server' }
             @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
         )
     }
@@ -4451,6 +4508,72 @@ function chk_gpo_rights {
     if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine GPO mit breitem Schreibrecht" "s" "Green" }
 }
 ####################################################################################################
+# Sicherheit Paket E: DC-Haertung vertieft (read-only Registry/Dienste je DC + dSHeuristics)       #
+####################################################################################################
+function chk_ldap_signing {
+    foreach ($dc in $DCs) {
+        $h = $dc.HostName
+        try {
+            $reg = Invoke-Command -ComputerName $h -ScriptBlock {
+                $p = 'HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters'
+                [pscustomobject]@{
+                    Integrity = (Get-ItemProperty -Path $p -Name LDAPServerIntegrity -ErrorAction SilentlyContinue).LDAPServerIntegrity
+                    CBT       = (Get-ItemProperty -Path $p -Name LdapEnforceChannelBinding -ErrorAction SilentlyContinue).LdapEnforceChannelBinding
+                }
+            } -ErrorAction Stop
+            if ("$($reg.Integrity)" -eq '2') { $sig = 'erforderlich'; $sfa = 'Green' } else { $sig = 'NICHT erforderlich'; $sfa = $F_Fehler }
+            switch ("$($reg.CBT)") {
+                '2'     { $cbt = 'immer';             $cfa = 'Green' }
+                '1'     { $cbt = 'wenn unterstuetzt'; $cfa = 'Yellow' }
+                default { $cbt = 'aus/nicht gesetzt'; $cfa = $F_Fehler }
+            }
+            2werte " $($dc.Name) - LDAP-Signing:" $sig "s" $sfa
+            2werte "   Channel Binding:" $cbt "s" $cfa
+        } catch { 2werte " $($dc.Name):" "nicht abfragbar (WinRM/Recht)" "s" "Yellow" }
+    }
+}
+function chk_smb_signing {
+    foreach ($dc in $DCs) {
+        $h = $dc.HostName
+        try {
+            $req = Invoke-Command -ComputerName $h -ScriptBlock {
+                (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters' `
+                    -Name RequireSecuritySignature -ErrorAction SilentlyContinue).RequireSecuritySignature
+            } -ErrorAction Stop
+            if ("$req" -eq '1') { $st = 'erforderlich'; $fa = 'Green' } else { $st = 'NICHT erforderlich'; $fa = $F_Fehler }
+            2werte " $($dc.Name) - SMB-Signing (Server):" $st "s" $fa
+        } catch { 2werte " $($dc.Name):" "nicht abfragbar (WinRM/Recht)" "s" "Yellow" }
+    }
+}
+function chk_print_spooler {
+    foreach ($dc in $DCs) {
+        $h = $dc.HostName
+        try {
+            $svc = Get-Service -ComputerName $h -Name Spooler -ErrorAction Stop
+            if ($svc.Status -eq 'Running') { $st = 'laeuft (PrinterBug/PetitPotam-Risiko)'; $fa = $F_Fehler } else { $st = "$($svc.Status)"; $fa = 'Green' }
+            2werte " $($dc.Name) - Print Spooler:" $st "s" $fa
+        } catch { 2werte " $($dc.Name):" "nicht abfragbar" "s" "Yellow" }
+    }
+}
+function chk_anon_ldap {
+    try {
+        $conf = (Get-ADRootDSE).configurationNamingContext
+        $dsDN = "CN=Directory Service,CN=Windows NT,CN=Services,$conf"
+        $heur = (Get-ADObject -Identity $dsDN -Properties dSHeuristics).dSHeuristics
+        if ([string]::IsNullOrEmpty($heur)) {
+            2werte "dSHeuristics:" "nicht gesetzt (Standard)" "s" "Green"
+            2werte "Anonyme LDAP-Binds:" "nicht erlaubt (Standard)" "s" "Green"
+            return
+        }
+        2werte "dSHeuristics:" "$heur" "s"
+        if ($heur.Length -ge 7 -and $heur[6] -eq '2') {
+            2werte "Anonyme LDAP-Binds:" "ERLAUBT (7. Zeichen = 2)" "s" $F_Fehler
+        } else {
+            2werte "Anonyme LDAP-Binds:" "nicht erlaubt" "s" "Green"
+        }
+    } catch { 2werte "dSHeuristics:" "nicht abfragbar" "s" "Yellow" }
+}
+####################################################################################################
 ####################################################################################################
 ##### Main                                                                                     #####
 ####################################################################################################
@@ -4587,6 +4710,18 @@ if($sysvchk -ge 1){
         Unterpruefung "GPP-Passwoerter (cpassword in SYSVOL)" 'gpp_cpassword' { chk_gpp_cpassword }
         Unterpruefung "Klartext-Credentials in SYSVOL-Skripten" 'sysvol_scripts' { chk_sysvol_scripts }
         Unterpruefung "GPO-Bearbeitungsrechte" 'gpo_rights' { chk_gpo_rights }
+    }
+}
+####################################################################################################
+## Bereich "DC-Haertung (vertieft)" (Paket E)                                                      ##
+####################################################################################################
+if($dchaert -ge 1){
+    Pruefbereich "DC-Haertung (vertieft)" -CheckId 'dc_haertung' {
+        Leerzeile
+        Unterpruefung "LDAP-Signing und Channel Binding" 'ldap_signing' { chk_ldap_signing }
+        Unterpruefung "SMB-Signing (erforderlich)" 'smb_signing' { chk_smb_signing }
+        Unterpruefung "Print Spooler auf DCs" 'print_spooler' { chk_print_spooler }
+        Unterpruefung "Anonyme LDAP-Binds (dSHeuristics)" 'anon_ldap' { chk_anon_ldap }
     }
 }
 ####################################################################################################
