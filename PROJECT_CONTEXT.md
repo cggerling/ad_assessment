@@ -123,6 +123,17 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Paket E – DC-Härtung vertieft" (Juni 2026):**
+- Neuer Schalter `$dchaert` (Default 1) und Bereich „DC-Härtung (vertieft)".
+- Vier read-only Checks je DC: **LDAP-Signing & Channel Binding** (Registry NTDS\Parameters:
+  LDAPServerIntegrity, LdapEnforceChannelBinding), **SMB-Signing erforderlich** (LanManServer:
+  RequireSecuritySignature), **Print Spooler** (Get-Service, PrinterBug/PetitPotam), **anonyme
+  LDAP-Binds** (dSHeuristics 7. Zeichen = 2). Iteriert über `$DCs`, Remote-Registry via
+  Invoke-Command/Get-Service.
+- Fünf neue Katalogeinträge mit Hintergrund + verifizierten Links (MS LDAP-Signing, MS
+  SMB-Signing, MITRE T1187 Forced Authentication, MS Security Baselines).
+- Testsuite auf 81 Tests. **Registry-/Dienst-Abfragen nicht lokal testbar -> DC-Test.**
+
 **v5.0 PR „Paket D – GPO/SYSVOL-Geheimnisse" (Juni 2026):**
 - Neuer Schalter `$sysvchk` (Default 1) und Bereich „GPO & SYSVOL – Geheimnisse".
 - Drei read-only Checks: **GPP-cpassword** (durchsucht SYSVOL-XMLs, entschlüsselt cpassword
