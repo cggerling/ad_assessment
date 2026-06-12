@@ -123,6 +123,17 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Paket B Nachschliff + Umlaut-Quickwins" (Juni 2026, nach DC-Lauf):**
+- AdminSDHolder-Check verfeinert: nur noch übernahme-relevante Rechte (GenericAll,
+  GenericWrite, WriteDacl, WriteOwner) gelten als Befund; reines (oft attributgebundenes)
+  WriteProperty/ReadProperty ist häufig ein legitimes Default-ACE (Cert Publishers, TS
+  License Servers, Azure AD Connect) und wird nicht mehr fälschlich rot markiert.
+- Umlaut-Quickwins in HTML-only/neu_text-Strings (Zusammenfassungs-Hinweis,
+  FEHLER-/Teilprüfung-Meldungen) — echte Umlaute im HTML, Text-Report transliteriert wie gehabt.
+- **Offen (eigener PR vorgesehen):** Die Beschriftungen der ~60 Alt-Check-Funktionen sind
+  noch transliteriert (geteilter ASCII-Text-Report). Voller Umlaut-Durchgang = Text-Report
+  auf UTF-8 (BOM) umstellen + neu_text-Transliteration entfernen + Labels de-transliterieren.
+
 **v5.0 PR „Paket B – Privilegien & ACLs" (Juni 2026):**
 - Neuer Schalter `$privchk` (Default 1, in Whitelist) und Bereich „Privilegien & ACLs".
 - Fünf read-only Checks: DCSync-Rechte (Replikations-ACEs am Domänenobjekt, GUIDs

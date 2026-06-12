@@ -1240,8 +1240,8 @@ function Pruefbereich ($titel,[scriptblock]$aktion,$CheckId) {
         $f_meldung = $_.Exception.Message
         $f_zeile = $_.InvocationInfo.ScriptLineNumber
         Leerzeile
-        neu_text 0 '!' "FEHLER - Bereich nur unvollstaendig geprueft" `
-            "Meldung: $f_meldung (Skriptzeile $f_zeile). Der Lauf wird mit dem naechsten Bereich fortgesetzt."
+        neu_text 0 '!' "FEHLER - Bereich nur unvollständig geprüft" `
+            "Meldung: $f_meldung (Skriptzeile $f_zeile). Der Lauf wird mit dem nächsten Bereich fortgesetzt."
         Leerzeile
         if ($A_Con -eq 1) {
             Write-Host "FEHLER im Bereich '$titel': $f_meldung" -ForegroundColor $F_Fehler
@@ -1262,8 +1262,8 @@ function Unterpruefung ($titel,$checkid,[scriptblock]$aktion) {
     Leerzeile
     try { & $aktion }
     catch {
-        neu_text 0 '!' "Hinweis: Teilpruefung uebersprungen" `
-            "Meldung: $($_.Exception.Message). Die uebrigen Pruefungen dieses Bereichs laufen weiter."
+        neu_text 0 '!' "Hinweis: Teilprüfung übersprungen" `
+            "Meldung: $($_.Exception.Message). Die übrigen Prüfungen dieses Bereichs laufen weiter."
     }
     Leerzeile
 }
@@ -1362,7 +1362,7 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
             [void]$H.AppendLine("<li><a href=""#chk-$($d.CheckId)"">$(Esc $d.DTitel)</a> <span class=""badge $(SevKlasse $d.Schwere)"">$(Esc $d.Schwere)</span></li>")
         }
         [void]$H.AppendLine('</ul>')
-        [void]$H.AppendLine('<p class="meta">Hinweis: Die Einstufung bewertet die Wichtigkeit des Pruefbereichs, nicht zwingend einen konkreten Befund. Begruendung und Empfehlung je Bereich im jeweiligen Block "Hintergrund &amp; Empfehlung".</p>')
+        [void]$H.AppendLine('<p class="meta">Hinweis: Die Einstufung bewertet die Wichtigkeit des Prüfbereichs, nicht zwingend einen konkreten Befund. Begründung und Empfehlung je Bereich im jeweiligen Block "Hintergrund &amp; Empfehlung".</p>')
         [void]$H.AppendLine('</section>')
     }
     $offen = ''                                  # aktuell geoeffnete Tabelle: '' | 'kv' | 'tab'
@@ -4068,7 +4068,10 @@ function chk_operatoren {
 function chk_adminsdholder {
     $domDN = (Get-ADDomain).DistinguishedName
     $acl   = Get-Acl -Path "AD:\CN=AdminSDHolder,CN=System,$domDN"
-    $gefaehrlich = 'GenericAll','GenericWrite','WriteDacl','WriteOwner','WriteProperty','AllExtendedRights'
+    # Nur uebernahme-relevante Rechte flaggen; reines (oft attributgebundenes) WriteProperty/
+    # ReadProperty ist haeufig ein legitimes Default-ACE (z. B. Cert Publishers, TS License
+    # Servers, Azure AD Connect) und wird bewusst NICHT als Befund gewertet.
+    $gefaehrlich = 'GenericAll','GenericWrite','WriteDacl','WriteOwner'
     $ok = 'SYSTEM','Domain Admins','Enterprise Admins','Administrators','CREATOR OWNER','SELF'
     $auffaellig = @()
     foreach ($ace in $acl.Access) {
