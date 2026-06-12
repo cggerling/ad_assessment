@@ -123,6 +123,21 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Paket C – AD CS / ESC1–8" (Juni 2026):**
+- Neuer Schalter `$adcschk` (Default 1, in Whitelist) und Bereich „AD CS – Zertifikatsdienste (ESC)".
+- Read-only über AD-Objekte unter `CN=Public Key Services` (Configuration-NC) + `certutil`:
+  Bestand (CAs/Vorlagen), **ESC1** (ENROLLEE_SUPPLIES_SUBJECT + Auth-EKU + kein Approval +
+  Enroll für breite Gruppen = Kritisch), **ESC2/ESC3** (Any-Purpose-/Enrollment-Agent-EKU),
+  **ESC4** (Vorlagen-ACL mit Schreibrecht für breite Gruppen), **ESC6** (CA-Flag
+  EDITF_ATTRIBUTESUBJECTALTNAME2 via certutil), **ESC8** (Web-Enrollment-Rolle via WinRM).
+- Helfer `Get-ADCSObjekte`, `Ist-NiedrigPriv` (SID-basiert, sprachunabhängig),
+  `Hat-NiedrigPrivEnroll` (Enrollment-Right-GUID 0e10c968-…).
+- Sechs neue Katalogeinträge (esc1=Kritisch) mit Hintergrund + verifizierten Links
+  (SpecterOps „Certified Pre-Owned", Microsoft AD CS overview).
+- Testsuite auf 73 Tests. Generischer Unterpruefung-CheckId-Test toleriert jetzt `$null`
+  (Inventory-Teilprüfung ohne Doku). **AD-/certutil-/WinRM-Abfragen nicht lokal testbar ->
+  Funktionstest am DC.**
+
 **v5.0 PR „Paket B Nachschliff + Umlaut-Quickwins" (Juni 2026, nach DC-Lauf):**
 - AdminSDHolder-Check verfeinert: nur noch übernahme-relevante Rechte (GenericAll,
   GenericWrite, WriteDacl, WriteOwner) gelten als Befund; reines (oft attributgebundenes)

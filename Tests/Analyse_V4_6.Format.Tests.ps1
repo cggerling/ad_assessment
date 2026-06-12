@@ -672,8 +672,11 @@ Describe 'Analyse_V4_6.ps1' {
             $aufrufe.Count | Should -BeGreaterOrEqual 5
             foreach ($cmd in $aufrufe) {
                 # Positional: [0]=Name der Funktion, [1]=Titel, [2]=CheckId, [3]=Scriptblock
+                # CheckId kann $null sein (z. B. Bestands-/Inventory-Teilpruefung ohne Doku).
                 $idEl = $cmd.CommandElements[2]
-                $global:CheckKatalog.Keys | Should -Contain $idEl.Value
+                if ($idEl -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                    $global:CheckKatalog.Keys | Should -Contain $idEl.Value
+                }
             }
         }
 
@@ -725,6 +728,33 @@ Describe 'Analyse_V4_6.ps1' {
 
         It 'der Schalter privchk steht in der Override-Whitelist' {
             (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match "'privchk'"
+        }
+    }
+
+    Context 'Paket C (v5.0): AD CS / ESC' {
+
+        It 'Katalog enthaelt alle Paket-C-Eintraege' {
+            foreach ($id in 'adcs','esc1','esc2_3','esc4','esc6','esc8') {
+                $global:CheckKatalog.Keys | Should -Contain $id
+            }
+        }
+
+        It 'ESC1-Eintrag ist als Kritisch eingestuft' {
+            $global:CheckKatalog['esc1'].Schwere | Should -Be 'Kritisch'
+        }
+
+        It 'die Paket-C-Prueffunktionen sind im Skript definiert' {
+            $funktionen = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
+            }, $true) | ForEach-Object { $_.Name }
+            foreach ($fn in 'Get-ADCSObjekte','Ist-NiedrigPriv','Hat-NiedrigPrivEnroll',
+                            'chk_esc1','chk_esc2_3','chk_esc4','chk_esc6','chk_esc8') {
+                $funktionen | Should -Contain $fn
+            }
+        }
+
+        It 'der Schalter adcschk steht in der Override-Whitelist' {
+            (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match "'adcschk'"
         }
     }
 

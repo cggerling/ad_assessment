@@ -167,6 +167,8 @@ $DomCon = 1                                      # DC Check aus/ein     (0=nein,
 $kerbchk = 1                                     # Kerberos-Checks (Paket A)         (0=nein,1=ja) #
 # Sicherheit: Privilegien & ACLs (v5.0)          ###################################################
 $privchk = 1                                     # Privilegien-/ACL-Checks (Paket B) (0=nein,1=ja) #
+# Sicherheit: AD CS / ESC (v5.0)                 ###################################################
+$adcschk = 1                                     # AD-CS-/ESC-Checks (Paket C)       (0=nein,1=ja) #
 ####################################################################################################
 # Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
 ################################################################                                   #
@@ -180,7 +182,7 @@ if ($Bereiche) {                                 # Einzelne Schalter per Hashtab
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
                        'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
                        'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk',   #
-                       'privchk')                                                                  #
+                       'privchk','adcschk')                                                        #
     foreach ($schalter in $Bereiche.Keys) {                                                        #
         if ($schalterListe -contains $schalter) {                                                  #
             Set-Variable -Name $schalter -Value ([int]$Bereiche[$schalter])                        #
@@ -621,6 +623,72 @@ $CheckKatalog = @{
         Quellen = @(
             @{ Titel = 'Microsoft Learn - Active Directory Security Groups'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups' }
             @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'adcs' = @{
+        Titel = 'AD CS - Zertifikatsdienste (ESC)'; Schwere = 'Hoch'
+        Zweck = 'Untersucht die AD-Zertifikatsdienste (AD CS) auf die bekannten Eskalationspfade ESC1-ESC8: angreifbare Zertifikatvorlagen, manipulierbare Vorlagen-ACLs, gefährliche CA-Einstellungen und HTTP-Web-Enrollment.'
+        Hintergrund = 'AD CS stellt Zertifikate aus, u. a. für die Authentifizierung (Client Authentication, Smartcard Logon, PKINIT). SpecterOps hat 2021 acht Fehlkonfigurationsklassen (ESC1-ESC8) beschrieben, mit denen sich aus Sicht eines normalen Benutzers ein Anmeldezertifikat für einen Administrator ausstellen lässt - eine direkte, oft übersehene Domänenübernahme. Vorlagen und CAs liegen als Objekte unter CN=Public Key Services im Configuration-Naming-Context und werden hier read-only ausgelesen.'
+        Beispiel = 'Eine einzige Vorlage, die "Antragsteller liefert Subject" erlaubt, Client-Authentication enthält und von "Domänen-Benutzer" angefordert werden darf, genügt für die vollständige Kompromittierung (ESC1).'
+        Empfehlung = 'Vorlagen-Rechte und -Flags nach den ESC1-ESC8-Kriterien prüfen und härten; EDITF_ATTRIBUTESUBJECTALTNAME2 deaktivieren; Web-Enrollment absichern bzw. abschalten; Vorlagen-ACLs auf Schreibrechte für breite Gruppen kontrollieren.'
+        Quellen = @(
+            @{ Titel = 'SpecterOps (Schroeder/Christensen) - Certified Pre-Owned: Abusing AD CS'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
+            @{ Titel = 'Microsoft Learn - What is Active Directory Certificate Services?'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/active-directory-certificate-services-overview' }
+        )
+    }
+    'esc1' = @{
+        Titel = 'ESC1 (Enrollee Supplies Subject + Auth-EKU)'; Schwere = 'Kritisch'
+        Zweck = 'Findet veröffentlichte Zertifikatvorlagen, die alle ESC1-Bedingungen erfüllen: "Antragsteller liefert Subject" (ENROLLEE_SUPPLIES_SUBJECT), eine Authentifizierungs-EKU, keine Manager-Genehmigung, keine geforderten Signaturen - und Enroll-Recht für niedrig privilegierte Prinzipale.'
+        Hintergrund = 'Bei ESC1 darf der Antragsteller den Subject (Alternative Name) der Vorlage selbst festlegen (msPKI-Certificate-Name-Flag-Bit ENROLLEE_SUPPLIES_SUBJECT). Enthält die Vorlage zusätzlich eine Authentifizierungs-EKU (Client Authentication 1.3.6.1.5.5.7.3.2, Smartcard Logon, PKINIT oder Any Purpose) und ist die Ausstellung ohne Genehmigung (kein PEND_ALL_REQUESTS) und ohne geforderte RA-Signaturen möglich, kann ein berechtigter Antragsteller ein Zertifikat auf "Administrator" ausstellen und sich damit per Kerberos PKINIT anmelden.'
+        Beispiel = 'Ein Mitglied von "Domänen-Benutzer" fordert ein Zertifikat dieser Vorlage mit SAN=Administrator an und meldet sich anschließend als Domain Admin an.'
+        Empfehlung = 'ENROLLEE_SUPPLIES_SUBJECT entfernen oder Manager-Genehmigung erzwingen; Enroll-Rechte auf benötigte, nicht-breite Gruppen einschränken; Authentifizierungs-EKUs nur dort belassen, wo nötig.'
+        Quellen = @(
+            @{ Titel = 'SpecterOps - Certified Pre-Owned (ESC1)'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
+            @{ Titel = 'Microsoft Learn - What is Active Directory Certificate Services?'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/active-directory-certificate-services-overview' }
+        )
+    }
+    'esc2_3' = @{
+        Titel = 'ESC2/ESC3 (Any Purpose / Enrollment Agent)'; Schwere = 'Hoch'
+        Zweck = 'Findet veröffentlichte Vorlagen mit Any-Purpose-EKU bzw. ohne EKU (ESC2) oder mit der Enrollment-Agent-EKU (ESC3), die von niedrig privilegierten Prinzipalen angefordert werden dürfen.'
+        Hintergrund = 'ESC2: Vorlagen mit Any Purpose (2.5.29.37.0) oder ganz ohne EKU erlauben es, das ausgestellte Zertifikat für nahezu beliebige Zwecke - inklusive Authentifizierung - zu verwenden. ESC3: Die Certificate-Request-Agent-EKU (1.3.6.1.4.1.311.20.2.1) erlaubt es, Zertifikate im Namen anderer zu beantragen (Enrollment Agent) - in Kombination mit anderen Vorlagen ein Weg zur Identitätsübernahme.'
+        Beispiel = 'Mit einem Enrollment-Agent-Zertifikat (ESC3) beantragt der Angreifer ein Smartcard-Logon-Zertifikat im Namen eines Administrators.'
+        Empfehlung = 'Any-Purpose-/EKU-lose Vorlagen vermeiden; Enrollment-Agent-Vorlagen streng auf wenige, dedizierte Konten beschränken; Enroll-Rechte einschränken.'
+        Quellen = @(
+            @{ Titel = 'SpecterOps - Certified Pre-Owned (ESC2/ESC3)'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
+            @{ Titel = 'Microsoft Learn - What is Active Directory Certificate Services?'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/active-directory-certificate-services-overview' }
+        )
+    }
+    'esc4' = @{
+        Titel = 'ESC4 (manipulierbare Vorlagen-ACL)'; Schwere = 'Hoch'
+        Zweck = 'Findet Zertifikatvorlagen, deren ACL niedrig privilegierten Prinzipalen Schreibrechte (GenericAll/GenericWrite/WriteDacl/WriteOwner/WriteProperty) gewährt.'
+        Hintergrund = 'Wer eine Vorlage bearbeiten darf, kann sie so umkonfigurieren, dass sie ESC1-angreifbar wird (ENROLLEE_SUPPLIES_SUBJECT setzen, Auth-EKU ergänzen, Genehmigung entfernen) und sich anschließend selbst ein Admin-Zertifikat ausstellen. Schreibrechte für breite Gruppen (Authenticated Users, Domänen-Benutzer) auf Vorlagen sind daher gleichwertig zu einer Übernahme-Möglichkeit.'
+        Beispiel = 'Authenticated Users hat WriteProperty auf einer Vorlage - der Angreifer macht sie zu ESC1 und übernimmt die Domäne.'
+        Empfehlung = 'Schreibrechte auf Zertifikatvorlagen ausschließlich PKI-Administratoren gewähren; breite Gruppen entfernen.'
+        Quellen = @(
+            @{ Titel = 'SpecterOps - Certified Pre-Owned (ESC4)'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
+            @{ Titel = 'Microsoft Learn - What is Active Directory Certificate Services?'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/active-directory-certificate-services-overview' }
+        )
+    }
+    'esc6' = @{
+        Titel = 'ESC6 (EDITF_ATTRIBUTESUBJECTALTNAME2)'; Schwere = 'Hoch'
+        Zweck = 'Prüft je CA, ob das Policy-Flag EDITF_ATTRIBUTESUBJECTALTNAME2 gesetzt ist (Abfrage über certutil).'
+        Hintergrund = 'Ist EDITF_ATTRIBUTESUBJECTALTNAME2 auf der CA aktiv, darf JEDER Antragsteller bei JEDER Vorlage einen beliebigen Subject Alternative Name (SAN) mitgeben - unabhängig davon, ob die Vorlage ENROLLEE_SUPPLIES_SUBJECT erlaubt. Damit wird praktisch jede client-auth-fähige Vorlage zu einem ESC1-Äquivalent. Das Flag ist eine CA-weite Fehlkonfiguration.'
+        Beispiel = 'Bei gesetztem Flag beantragt ein Benutzer ein gewöhnliches Zertifikat, schmuggelt aber SAN=Administrator hinein und meldet sich als Admin an.'
+        Empfehlung = 'EDITF_ATTRIBUTESUBJECTALTNAME2 auf allen CAs deaktivieren (certutil -setreg policy\EditFlags -EDITF_ATTRIBUTESUBJECTALTNAME2; danach den Zertifikatdienst neu starten).'
+        Quellen = @(
+            @{ Titel = 'SpecterOps - Certified Pre-Owned (ESC6)'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
+            @{ Titel = 'Microsoft Learn - What is Active Directory Certificate Services?'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/active-directory-certificate-services-overview' }
+        )
+    }
+    'esc8' = @{
+        Titel = 'ESC8 (HTTP Web Enrollment / NTLM-Relay)'; Schwere = 'Mittel'
+        Zweck = 'Prüft je CA-Host, ob die Rolle "Web Enrollment" (HTTP-Antragsschnittstelle certsrv) installiert ist.'
+        Hintergrund = 'Die Web-Enrollment-Schnittstelle (certsrv) akzeptiert HTTP und standardmäßig NTLM-Authentifizierung. Ein Angreifer kann die NTLM-Authentifizierung eines Computerkontos (z. B. eines DCs, erzwungen via PetitPotam/PrinterBug) an diese Schnittstelle weiterleiten (Relay) und im Namen des Opfers ein Zertifikat ausstellen lassen - ein Weg zur DC-/Domänenübernahme.'
+        Beispiel = 'Per PetitPotam wird ein DC zur NTLM-Authentifizierung gezwungen; diese wird an http://CA/certsrv relayt und ein DC-Zertifikat ausgestellt.'
+        Empfehlung = 'Web-Enrollment nur wenn nötig betreiben; HTTPS mit Extended Protection (Channel Binding) erzwingen und NTLM deaktivieren; CA-/RPC-Endpunkte gegen Relay härten (siehe Microsoft ADV210003).'
+        Quellen = @(
+            @{ Titel = 'SpecterOps - Certified Pre-Owned (ESC8)'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
+            @{ Titel = 'Microsoft Learn - What is Active Directory Certificate Services?'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/active-directory-certificate-services-overview' }
         )
     }
 }
@@ -4116,6 +4184,129 @@ function chk_prewin2000 {
     } catch { 2werte "Pre-Windows 2000 Compatible Access:" "nicht abfragbar (ggf. Spezial-Identitaeten)" "s" "Yellow" }
 }
 ####################################################################################################
+# Sicherheit Paket C: AD CS / ESC (read-only AD-Objekte + certutil)                                #
+####################################################################################################
+function Ist-NiedrigPriv ($idref) {
+    # Breite/niedrig privilegierte Prinzipale (SID-basiert, sprachunabhaengig).
+    try { $sid = $idref.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $sid = "$idref" }
+    if (@('S-1-5-11','S-1-1-0','S-1-5-7') -contains $sid) { return $true }   # Auth Users, Everyone, Anonymous
+    if ($sid -match '-(513|515|545)$') { return $true }                       # Domain Users, Domain Computers, Users
+    return $false
+}
+function Get-ADCSObjekte {
+    $conf = (Get-ADRootDSE).configurationNamingContext
+    $pks  = "CN=Public Key Services,CN=Services,$conf"
+    $tmpl = @(Get-ADObject -SearchBase "CN=Certificate Templates,$pks" -LDAPFilter '(objectClass=pKICertificateTemplate)' `
+              -Properties displayName,name,'msPKI-Certificate-Name-Flag','msPKI-Enrollment-Flag','msPKI-RA-Signature',pKIExtendedKeyUsage,'msPKI-Certificate-Application-Policy')
+    $cas  = @(Get-ADObject -SearchBase "CN=Enrollment Services,$pks" -LDAPFilter '(objectClass=pKIEnrollmentService)' `
+              -Properties name,dNSHostName,certificateTemplates)
+    $pub  = @($cas | ForEach-Object { $_.certificateTemplates } | Where-Object { $_ } | Sort-Object -Unique)
+    [pscustomobject]@{ Templates = $tmpl; CAs = $cas; Published = $pub }
+}
+function Hat-NiedrigPrivEnroll ($dn) {
+    $enrollGuid = '0e10c968-78fb-11d2-90d4-00c04f79dc55'   # Certificate-Enrollment
+    $autoGuid   = 'a05b8cc2-17bc-4802-a710-e7c15ab866a2'   # Auto-Enrollment
+    try { $acl = Get-Acl -Path "AD:\$dn" } catch { return $false }
+    foreach ($ace in $acl.Access) {
+        if ($ace.AccessControlType -ne 'Allow') { continue }
+        $g = "$($ace.ObjectType)"
+        $rechte = "$($ace.ActiveDirectoryRights)"
+        $istEnroll = ($g -eq $enrollGuid -or $g -eq $autoGuid -or $rechte -match 'GenericAll')
+        if ($istEnroll -and (Ist-NiedrigPriv $ace.IdentityReference)) { return $true }
+    }
+    return $false
+}
+function chk_adcs_inventory {
+    $o = Get-ADCSObjekte
+    2werte "Zertifizierungsstellen (CAs):" "$($o.CAs.Count)" "s"
+    foreach ($ca in $o.CAs) { 2werte " - $($ca.Name)" "$($ca.dNSHostName)" "s" }
+    2werte "Vorlagen gesamt / veroeffentlicht:" "$($o.Templates.Count) / $($o.Published.Count)" "s"
+}
+function chk_esc1 {
+    $o = Get-ADCSObjekte
+    $authEku = '1.3.6.1.5.5.7.3.2','1.3.6.1.4.1.311.20.2.2','1.3.6.1.5.2.3.4','2.5.29.37.0'
+    $treffer = @()
+    foreach ($t in $o.Templates) {
+        if ($o.Published -notcontains $t.name) { continue }
+        if (([int]$t.'msPKI-Certificate-Name-Flag' -band 1) -eq 0) { continue }   # kein ENROLLEE_SUPPLIES_SUBJECT
+        if (([int]$t.'msPKI-Enrollment-Flag' -band 2) -ne 0) { continue }          # Manager-Approval
+        if ([int]$t.'msPKI-RA-Signature' -gt 0) { continue }                        # Signaturen noetig
+        $ekus = @($t.pKIExtendedKeyUsage) + @($t.'msPKI-Certificate-Application-Policy') | Where-Object { $_ }
+        $hatAuth = ($ekus.Count -eq 0) -or (@($ekus | Where-Object { $authEku -contains $_ }).Count -gt 0)
+        if (-not $hatAuth) { continue }
+        if (Hat-NiedrigPrivEnroll $t.DistinguishedName) { $treffer += "$($t.displayName)" }
+    }
+    if ($treffer.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "ESC1-verdaechtige Vorlagen:" "$($treffer.Count)" "s" $fa
+    foreach ($x in $treffer) { 2werte " $x" "Subject frei + Auth-EKU + Enroll fuer breite Gruppe" "s" $F_Fehler }
+    if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine ESC1-Vorlage gefunden" "s" "Green" }
+}
+function chk_esc2_3 {
+    $o = Get-ADCSObjekte
+    $anyPurpose = '2.5.29.37.0' ; $enrollAgent = '1.3.6.1.4.1.311.20.2.1'
+    $tr = @()
+    foreach ($t in $o.Templates) {
+        if ($o.Published -notcontains $t.name) { continue }
+        $ekus = @($t.pKIExtendedKeyUsage) + @($t.'msPKI-Certificate-Application-Policy') | Where-Object { $_ }
+        $isAny = ($ekus.Count -eq 0) -or ($ekus -contains $anyPurpose)
+        $isAgent = $ekus -contains $enrollAgent
+        if (-not ($isAny -or $isAgent)) { continue }
+        if (Hat-NiedrigPrivEnroll $t.DistinguishedName) {
+            $typ = if ($isAgent) { 'ESC3 (Enrollment Agent)' } else { 'ESC2 (Any Purpose/kein EKU)' }
+            $tr += [pscustomobject]@{ Name = "$($t.displayName)"; Typ = $typ }
+        }
+    }
+    if ($tr.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "ESC2/ESC3-verdaechtige Vorlagen:" "$($tr.Count)" "s" $fa
+    foreach ($x in $tr) { 2werte " $($x.Name)" $x.Typ "s" $F_Fehler }
+    if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine ESC2/ESC3-Vorlage gefunden" "s" "Green" }
+}
+function chk_esc4 {
+    $o = Get-ADCSObjekte
+    $gefaehr = 'GenericAll','GenericWrite','WriteDacl','WriteOwner','WriteProperty'
+    $tr = @()
+    foreach ($t in $o.Templates) {
+        try { $acl = Get-Acl -Path "AD:\$($t.DistinguishedName)" } catch { continue }
+        foreach ($ace in $acl.Access) {
+            if ($ace.AccessControlType -ne 'Allow') { continue }
+            $rechte = "$($ace.ActiveDirectoryRights)"
+            $hat = $false ; foreach ($r in $gefaehr) { if ($rechte -match $r) { $hat = $true; break } }
+            if ($hat -and (Ist-NiedrigPriv $ace.IdentityReference)) {
+                $tr += [pscustomobject]@{ Name = "$($t.displayName)"; Wer = "$($ace.IdentityReference)" }
+            }
+        }
+    }
+    if ($tr.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "ESC4 (Vorlagen mit Schreibrecht fuer breite Gruppen):" "$($tr.Count)" "s" $fa
+    foreach ($x in $tr) { 2werte " $($x.Name)" "Schreibrecht: $($x.Wer)" "s" $F_Fehler }
+    if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine ESC4-Vorlage gefunden" "s" "Green" }
+}
+function chk_esc6 {
+    $o = Get-ADCSObjekte
+    if ($o.CAs.Count -eq 0) { 2werte "ESC6 (SAN-Flag):" "keine CA gefunden" "s" "Green"; return }
+    foreach ($ca in $o.CAs) {
+        $cfg = "$($ca.dNSHostName)\$($ca.Name)"
+        try {
+            $out = certutil -config $cfg -getreg policy\EditFlags 2>&1 | Out-String
+            if ($out -match 'EDITF_ATTRIBUTESUBJECTALTNAME2') { $fa = $F_Fehler; $st = 'GESETZT (gefaehrlich)' }
+            else { $fa = 'Green'; $st = 'nicht gesetzt' }
+            2werte " $cfg" $st "s" $fa
+        } catch { 2werte " $cfg" "nicht abfragbar (CA/Recht)" "s" "Yellow" }
+    }
+}
+function chk_esc8 {
+    $o = Get-ADCSObjekte
+    if ($o.CAs.Count -eq 0) { 2werte "ESC8 (Web Enrollment):" "keine CA gefunden" "s" "Green"; return }
+    foreach ($ca in $o.CAs) {
+        $h = $ca.dNSHostName
+        try {
+            $feat = Invoke-Command -ComputerName $h -ScriptBlock { (Get-WindowsFeature ADCS-Web-Enrollment).Installed } -ErrorAction Stop
+            if ($feat) { $fa = $F_Fehler; $st = 'installiert (NTLM-Relay-Ziel)' } else { $fa = 'Green'; $st = 'nicht installiert' }
+            2werte " $h" $st "s" $fa
+        } catch { 2werte " $h" "nicht abfragbar (WinRM/Recht)" "s" "Yellow" }
+    }
+}
+####################################################################################################
 ####################################################################################################
 ##### Main                                                                                     #####
 ####################################################################################################
@@ -4227,6 +4418,20 @@ if($privchk -ge 1){
         Unterpruefung "AdminSDHolder-ACL" 'adminsdholder' { chk_adminsdholder }
         Unterpruefung "Protected Users (Nutzung)" 'protected_users' { chk_protected_users }
         Unterpruefung "Pre-Windows 2000 Compatible Access" 'prewin2000' { chk_prewin2000 }
+    }
+}
+####################################################################################################
+## Bereich "AD CS - Zertifikatsdienste (ESC)" (Paket C)                                            ##
+####################################################################################################
+if($adcschk -ge 1){
+    Pruefbereich "AD CS - Zertifikatsdienste (ESC)" -CheckId 'adcs' {
+        Leerzeile
+        Unterpruefung "Bestand (CAs und Vorlagen)" $null { chk_adcs_inventory }
+        Unterpruefung "ESC1 (Enrollee Supplies Subject + Auth-EKU)" 'esc1' { chk_esc1 }
+        Unterpruefung "ESC2/ESC3 (Any Purpose / Enrollment Agent)" 'esc2_3' { chk_esc2_3 }
+        Unterpruefung "ESC4 (manipulierbare Vorlagen-ACL)" 'esc4' { chk_esc4 }
+        Unterpruefung "ESC6 (EDITF_ATTRIBUTESUBJECTALTNAME2 auf CA)" 'esc6' { chk_esc6 }
+        Unterpruefung "ESC8 (HTTP Web Enrollment)" 'esc8' { chk_esc8 }
     }
 }
 ####################################################################################################
