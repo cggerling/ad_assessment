@@ -123,6 +123,24 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Paket F – Delta-Modus / Zeitvergleich" (Juni 2026):**
+- Neuer Parameter `-Vergleich <Pfad>` (+ Schalter `$deltchk`, Default 1) und Bereich
+  „Veränderungen seit letztem Lauf (Delta)". Läuft **nur**, wenn `-Vergleich` gesetzt ist,
+  ganz am Ende nach allen anderen Bereichen.
+- Zwei reine Datenfunktionen (keine AD-Abfragen): `Extrahiere-Befunde` bildet aus einer
+  Ereignisliste die Menge der rot/gelb markierten Befunde (eigene Delta-Artefakte werden
+  herausgefiltert); `chk_delta` lädt einen früheren JSON-Export, vergleicht ihn mit dem
+  aktuellen Lauf (`$R_Daten`) und listet **Neu hinzugekommen** (rot) und **Behoben** (grün)
+  plus Zähler „unverändert".
+- Robustheit: fehlende/ungültige Vergleichsdatei wird freundlich gemeldet; Hinweis, wenn der
+  aktuelle Lauf ohne Export (kein HTML/JSON) läuft.
+- Ein neuer Katalogeintrag `delta` (Schwere Info) mit Hintergrund + verifizierten Links
+  (MS Best Practices for Securing AD, MS Security Baselines).
+- Testsuite auf **90 Tests** (+9): Katalog/Schalter/Parameter plus **funktionale** Tests der
+  Delta-Logik (rein lokal, ohne AD: Befund-Extraktion, Neu/Behoben-Erkennung gegen ein
+  Temp-JSON, Artefakt-Filter, fehlende Datei). Grün unter PS 7 und PS 5.1.
+- **Letztes geplantes Sicherheitspaket.** Danach folgt der große Umlaut-/Content-Feinschliff.
+
 **v5.0 PR „Paket E – DC-Härtung vertieft" (Juni 2026):**
 - Neuer Schalter `$dchaert` (Default 1) und Bereich „DC-Härtung (vertieft)".
 - Vier read-only Checks je DC: **LDAP-Signing & Channel Binding** (Registry NTDS\Parameters:

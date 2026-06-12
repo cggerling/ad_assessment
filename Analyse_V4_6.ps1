@@ -40,6 +40,11 @@
 .PARAMETER KeinJSON
     Unterdrueckt den zusaetzlichen JSON-Export (Standard: wird erzeugt).
 
+.PARAMETER Vergleich
+    Pfad zu einem frueheren JSON-Export. Ist er angegeben, ergaenzt der Report einen
+    Delta-Bereich, der neu hinzugekommene und behobene Befunde (rot/gelb markierte
+    Eintraege) gegenueber jenem Lauf auflistet.
+
 .EXAMPLE
     .\Analyse_V4_6.ps1
     Kompletter Lauf mit den im Skript-Kopf hinterlegten Standardwerten.
@@ -51,6 +56,10 @@
 .EXAMPLE
     .\Analyse_V4_6.ps1 -Bereiche @{ dnschk = 0; allgpo = 0 }
     Kompletter Lauf, aber ohne DNS- und GPO-Pruefung.
+
+.EXAMPLE
+    .\Analyse_V4_6.ps1 -Vergleich "C:\AD-Assessment\DC01\AD-Analyse-Report_alt.json"
+    Kompletter Lauf mit Delta-Bereich: neue/behobene Befunde gegenueber dem alten Export.
 
 .OUTPUTS
     Fest formatierter Text-Report unter $verz\<COMPUTERNAME>\<B_Datei>_<Datum>.txt
@@ -80,6 +89,7 @@ param (
     [switch]$KeineDatei,                             # Datei-Ausgabe unterdruecken   ($A_Dat = 0)
     [switch]$KeinHTML,                               # HTML-Report unterdruecken     ($A_Htm = 0)
     [switch]$KeinJSON,                               # JSON-Export unterdruecken     ($A_Jsn = 0)
+    [string]$Vergleich,                              # Delta: Pfad zu frueherem JSON-Export
     [hashtable]$Bereiche                             # Schalter-Overrides, z.B. @{ dnschk = 0 }
 )
 ####################################################################################################
@@ -173,6 +183,8 @@ $adcschk = 1                                     # AD-CS-/ESC-Checks (Paket C)  
 $sysvchk = 1                                     # GPO/SYSVOL-Checks (Paket D)       (0=nein,1=ja) #
 # Sicherheit: DC-Haertung vertieft (v5.0)        ###################################################
 $dchaert = 1                                     # DC-Haertung-Checks (Paket E)      (0=nein,1=ja) #
+# Sicherheit: Delta-Modus / Zeitvergleich (v5.0) ###################################################
+$deltchk = 1                                     # Delta-Bereich (Paket F)           (0=nein,1=ja) #
 ####################################################################################################
 # Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
 ################################################################                                   #
@@ -186,7 +198,7 @@ if ($Bereiche) {                                 # Einzelne Schalter per Hashtab
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
                        'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
                        'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk',   #
-                       'privchk','adcschk','sysvchk','dchaert')                                    #
+                       'privchk','adcschk','sysvchk','dchaert','deltchk')                          #
     foreach ($schalter in $Bereiche.Keys) {                                                        #
         if ($schalterListe -contains $schalter) {                                                  #
             Set-Variable -Name $schalter -Value ([int]$Bereiche[$schalter])                        #
@@ -792,6 +804,17 @@ $CheckKatalog = @{
         Quellen = @(
             @{ Titel = 'Microsoft Learn - How to enable LDAP signing'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/enable-ldap-signing-in-windows-server' }
             @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'delta' = @{
+        Titel = 'Veränderungen seit letztem Lauf (Delta)'; Schwere = 'Info'
+        Zweck = 'Vergleicht den aktuellen Lauf mit einem früheren JSON-Export und stellt neu hinzugekommene und behobene Befunde gegenüber. Technisch werden die als auffällig markierten Einträge (rot = kritisch/Fehler, gelb = Warnung) beider Läufe als Mengen gebildet und die Differenz berechnet.'
+        Hintergrund = 'Ein Sicherheits-Assessment entfaltet seinen Wert vor allem im Zeitverlauf: Eine Momentaufnahme zeigt den Zustand, erst der Vergleich zweier Läufe zeigt Fortschritt (Behebung) und Rückschritt (Drift, neue Funde). Der Delta-Modus liest über -Vergleich einen früheren JSON-Export ein, extrahiert aus beiden Datensätzen die rot/gelb markierten Ereignisse und ermittelt: NEU = im aktuellen Lauf vorhanden, im alten nicht (mögliche Regression oder neu entdeckte Schwachstelle); BEHOBEN = im alten Lauf vorhanden, jetzt nicht mehr. Der Abgleich erfolgt rein lokal über die JSON-Exporte - es werden keine zusätzlichen AD-Abfragen ausgelöst. So lassen sich Remediationsmaßnahmen belegen (z.B. gegenüber Audit/Management) und schleichende Verschlechterungen früh erkennen.'
+        Beispiel = 'Nach dem Entfernen der Enroll-Berechtigung an einer verwundbaren Zertifikatsvorlage erscheint der ESC1-Befund im nächsten Lauf unter "Behoben". Taucht hingegen ein neuer Domänen-Admin oder eine neue kerberoastbare Dienst-SPN auf, listet ihn der Bereich unter "Neu".'
+        Empfehlung = 'Den JSON-Export jedes Assessments revisionssicher aufbewahren (Datum/DC im Dateinamen) und beim nächsten Lauf via -Vergleich referenzieren. Neue Befunde priorisiert prüfen; behobene als Nachweis dokumentieren. Den Vergleich möglichst gegen denselben DC bzw. dieselbe Domäne fahren, damit die Mengen vergleichbar sind.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+            @{ Titel = 'Microsoft Learn - Security baselines (Windows / Security Compliance Toolkit)'; Url = 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/device-management/windows-security-configuration-framework/windows-security-baselines' }
         )
     }
 }
@@ -4574,6 +4597,57 @@ function chk_anon_ldap {
     } catch { 2werte "dSHeuristics:" "nicht abfragbar" "s" "Yellow" }
 }
 ####################################################################################################
+## Paket F - Delta-Modus: Vergleich mit frueherem JSON-Export                                      ##
+####################################################################################################
+function Extrahiere-Befunde ($ereignisse) {
+    # Bildet aus einer Ereignisliste die Menge der auffaelligen Befunde (rot/gelb).
+    # Rueckgabe: Hashtable (Schluessel = normalisierter Befundtext) fuer schnellen Mengenvergleich.
+    $set = @{}
+    if ($null -eq $ereignisse) { return $set }
+    foreach ($e in $ereignisse) {
+        if ($e.Art -ne 'Wert') { continue }
+        $farbe = "$($e.Farbe)"
+        if ($farbe -notmatch '^(Dark)?(Red|Yellow)$') { continue }     # nur Befund-Farben
+        $name = "$($e.Name)".Trim()
+        # eigene Delta-Ausgaben frueherer Laeufe nicht erneut als Befund werten:
+        if ($name -match '^(\s*[+\-]\s|Neu hinzugekommen|Behoben|Vergleich mit|Befunde \(alt|Unveraendert|Hinweis:)') { continue }
+        $wert = "$($e.Wert)".Trim()
+        $key  = if ($wert) { "$name | $wert" } else { $name }
+        $set[$key] = $true
+    }
+    return $set
+}
+function chk_delta ($altPfad) {
+    if ([string]::IsNullOrWhiteSpace($altPfad)) { return }
+    if (-not (Test-Path -LiteralPath $altPfad)) {
+        2werte "Vergleichsdatei:" "nicht gefunden ($altPfad)" "s" "Yellow"; return
+    }
+    try {
+        $alt = Get-Content -LiteralPath $altPfad -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        2werte "Vergleichsdatei:" "nicht lesbar (kein gueltiges JSON)" "s" "Yellow"; return
+    }
+    $altEreignisse = if ($alt.PSObject.Properties.Name -contains 'Ereignisse') { $alt.Ereignisse } else { $alt }
+    if ($R_Daten.Count -eq 0) {
+        2werte "Hinweis:" "Aktueller Lauf ohne Export - Delta nicht moeglich (HTML/JSON aktiv lassen)" "s" "Yellow"; return
+    }
+    $alteBefunde = Extrahiere-Befunde $altEreignisse
+    $neueBefunde = Extrahiere-Befunde $R_Daten
+    $neu     = @($neueBefunde.Keys | Where-Object { -not $alteBefunde.ContainsKey($_) } | Sort-Object)
+    $behoben = @($alteBefunde.Keys | Where-Object { -not $neueBefunde.ContainsKey($_) } | Sort-Object)
+    $bleibt  = @($neueBefunde.Keys | Where-Object {       $alteBefunde.ContainsKey($_) }).Count
+
+    2werte "Vergleich mit:" (Split-Path -Leaf $altPfad) "s"
+    2werte "Befunde (alt / aktuell):" "$($alteBefunde.Count) / $($neueBefunde.Count)" "s"
+    2werte "Unveraendert:" "$bleibt" "s"
+    Leerzeile
+    2werte "Neu hinzugekommen:" "$($neu.Count)" "s" $(if ($neu.Count -gt 0) { $F_Fehler } else { "Green" })
+    foreach ($x in $neu)     { 2werte "  + $x" "" "s" $F_Fehler }
+    Leerzeile
+    2werte "Behoben (nicht mehr vorhanden):" "$($behoben.Count)" "s" $(if ($behoben.Count -gt 0) { "Green" } else { "White" })
+    foreach ($x in $behoben) { 2werte "  - $x" "" "s" "Green" }
+}
+####################################################################################################
 ####################################################################################################
 ##### Main                                                                                     #####
 ####################################################################################################
@@ -4866,6 +4940,15 @@ if ($DomCon -ge 1) {
     Pruefbereich "Domain Controller" -CheckId 'dc_detail' {
         Leerzeile
         AD_Controller
+    }
+}
+####################################################################################################
+## Bereich "Veraenderungen seit letztem Lauf (Delta)" (Paket F)                                    ##
+####################################################################################################
+if ($deltchk -ge 1 -and $Vergleich) {
+    Pruefbereich "Veraenderungen seit letztem Lauf (Delta)" -CheckId 'delta' {
+        Leerzeile
+        Unterpruefung "Vergleich mit frueherem JSON-Export" 'delta' { chk_delta $Vergleich }
     }
 }
 ####################################################################################################
