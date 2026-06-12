@@ -169,6 +169,8 @@ $kerbchk = 1                                     # Kerberos-Checks (Paket A)    
 $privchk = 1                                     # Privilegien-/ACL-Checks (Paket B) (0=nein,1=ja) #
 # Sicherheit: AD CS / ESC (v5.0)                 ###################################################
 $adcschk = 1                                     # AD-CS-/ESC-Checks (Paket C)       (0=nein,1=ja) #
+# Sicherheit: GPO/SYSVOL-Geheimnisse (v5.0)      ###################################################
+$sysvchk = 1                                     # GPO/SYSVOL-Checks (Paket D)       (0=nein,1=ja) #
 ####################################################################################################
 # Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
 ################################################################                                   #
@@ -182,7 +184,7 @@ if ($Bereiche) {                                 # Einzelne Schalter per Hashtab
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
                        'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
                        'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk',   #
-                       'privchk','adcschk')                                                        #
+                       'privchk','adcschk','sysvchk')                                              #
     foreach ($schalter in $Bereiche.Keys) {                                                        #
         if ($schalterListe -contains $schalter) {                                                  #
             Set-Variable -Name $schalter -Value ([int]$Bereiche[$schalter])                        #
@@ -689,6 +691,50 @@ $CheckKatalog = @{
         Quellen = @(
             @{ Titel = 'SpecterOps - Certified Pre-Owned (ESC8)'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
             @{ Titel = 'Microsoft Learn - What is Active Directory Certificate Services?'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-cs/active-directory-certificate-services-overview' }
+        )
+    }
+    'gpo_sysvol' = @{
+        Titel = 'GPO & SYSVOL - Geheimnisse'; Schwere = 'Hoch'
+        Zweck = 'Durchsucht SYSVOL und die GPO-Objekte nach hinterlegten Geheimnissen und gefährlichen Bearbeitungsrechten: GPP-Passwörter (cpassword), Klartext-Anmeldedaten in Skripten und breite Schreibrechte auf GPOs.'
+        Hintergrund = 'SYSVOL ist für alle Domänenbenutzer lesbar. Wer dort Passwörter (Group Policy Preferences) oder Anmeldedaten in Logon-/Startup-Skripten ablegt, gibt sie faktisch jedem authentifizierten Benutzer preis. Gleichzeitig entscheidet die ACL der GPO-Objekte, wer Richtlinien ändern darf - ein zu breit vergebenes Schreibrecht erlaubt das Ausrollen von Code auf alle erfassten Systeme.'
+        Beispiel = 'Ein einziges cpassword in einer SYSVOL-XML genügt: Der AES-Schlüssel ist seit 2014 öffentlich, jeder Benutzer kann das Passwort entschlüsseln.'
+        Empfehlung = 'GPP-Passwörter entfernen (MS14-025), Klartext-Credentials aus Skripten verbannen (gMSA/LAPS), GPO-Bearbeitungsrechte auf wenige Administratoren beschränken.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1552.006 - Group Policy Preferences'; Url = 'https://attack.mitre.org/techniques/T1552/006/' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'gpp_cpassword' = @{
+        Titel = 'GPP-Passwörter (cpassword in SYSVOL)'; Schwere = 'Kritisch'
+        Zweck = 'Durchsucht die GPP-XML-Dateien im SYSVOL (Groups.xml, Services.xml, ScheduledTasks.xml, DataSources.xml, Printers.xml, Drives.xml) nach cpassword-Werten und entschlüsselt sie zur Demonstration.'
+        Hintergrund = 'Group Policy Preferences konnten früher Passwörter (lokale Admins, Dienst-/Aufgabenkonten, Laufwerks-Mappings) verteilen. Diese werden als cpassword-Attribut AES-256-verschlüsselt in SYSVOL-XMLs abgelegt - der 32-Byte-Schlüssel wurde von Microsoft 2014 (MS14-025, CVE-2014-1812) öffentlich gemacht. Da jeder Domänenbenutzer SYSVOL lesen kann, ist jedes cpassword trivial entschlüsselbar. MS14-025 entfernt nur die Möglichkeit, NEUE solche Passwörter anzulegen - bestehende müssen manuell entfernt werden.'
+        Beispiel = 'Ein cpassword in Groups.xml setzt das lokale Administrator-Passwort auf allen Clients - der Angreifer entschlüsselt es und hat überall lokalen Admin.'
+        Empfehlung = 'Alle cpassword-Vorkommen aus SYSVOL entfernen und die betroffenen Passwörter rotieren; für lokale Admin-Passwörter LAPS, für Dienstkonten gMSA verwenden.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1552.006 - Group Policy Preferences'; Url = 'https://attack.mitre.org/techniques/T1552/006/' }
+            @{ Titel = 'Microsoft Security Bulletin MS14-025 (CVE-2014-1812)'; Url = 'https://learn.microsoft.com/en-us/security-updates/securitybulletins/2014/ms14-025' }
+        )
+    }
+    'sysvol_scripts' = @{
+        Titel = 'Klartext-Credentials in SYSVOL-Skripten'; Schwere = 'Hoch'
+        Zweck = 'Durchsucht Skriptdateien im SYSVOL (.bat/.cmd/.ps1/.vbs/.kix) nach Mustern, die auf hinterlegte Klartext-Anmeldedaten hindeuten (net use /user:, password=, ConvertTo-SecureString -AsPlainText u. a.).'
+        Hintergrund = 'Logon-, Startup- und Wartungsskripte werden häufig in SYSVOL abgelegt und sind für alle Domänenbenutzer lesbar. Enthalten sie hartkodierte Anmeldedaten (z. B. für Laufwerks-Mappings, geplante Aufgaben oder Tool-Aufrufe), kann jeder Benutzer sie auslesen. Die Prüfung ist heuristisch (muster-basiert) und kann False Positives liefern - die Treffer sind manuell zu bewerten.'
+        Beispiel = 'Ein logon.bat mit "net use Z: \\srv\share /user:svc-backup P@ssw0rd" verrät das Dienstkonto-Passwort an jeden Benutzer.'
+        Empfehlung = 'Klartext-Anmeldedaten aus Skripten entfernen; stattdessen gMSA, LAPS oder einen Credential-Manager verwenden; betroffene Passwörter rotieren.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1552.001 - Credentials In Files'; Url = 'https://attack.mitre.org/techniques/T1552/001/' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
+        )
+    }
+    'gpo_rights' = @{
+        Titel = 'GPO-Bearbeitungsrechte'; Schwere = 'Hoch'
+        Zweck = 'Prüft die ACLs der GPO-Objekte auf Schreibrechte (GenericAll/GenericWrite/WriteDacl/WriteOwner/WriteProperty) für niedrig privilegierte/breite Prinzipale.'
+        Hintergrund = 'Wer eine verknüpfte GPO bearbeiten darf, kann auf allen davon erfassten Systemen Einstellungen, Skripte oder geplante Aufgaben ausrollen - inklusive Codeausführung als SYSTEM (MITRE T1484.001). Schreibrechte für breite Gruppen (Authenticated Users, Domänen-Benutzer) auf GPOs sind daher hochkritisch, besonders bei GPOs, die auf Domänencontroller oder Server wirken.'
+        Beispiel = 'Hat "Authenticated Users" GenericWrite auf der Default Domain Policy, kann jeder Benutzer ein Startup-Skript einschleusen, das auf allen Systemen als SYSTEM läuft.'
+        Empfehlung = 'GPO-Bearbeitungsrechte ausschließlich dedizierten GPO-Administratoren gewähren; breite Gruppen entfernen; Änderungen überwachen.'
+        Quellen = @(
+            @{ Titel = 'MITRE ATT&CK T1484.001 - Group Policy Modification'; Url = 'https://attack.mitre.org/techniques/T1484/001/' }
+            @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
         )
     }
 }
@@ -4320,6 +4366,91 @@ function chk_esc8 {
     }
 }
 ####################################################################################################
+# Sicherheit Paket D: GPO/SYSVOL-Geheimnisse (read-only Datei-/ACL-Abfragen)                       #
+####################################################################################################
+function Entschluessle-GPP ($cpassword) {
+    # GPP cpassword mit dem oeffentlich bekannten AES-256-Schluessel (MS14-025) entschluesseln.
+    try {
+        $rest = $cpassword.Length % 4
+        if ($rest -ne 0) { $cpassword += ('=' * (4 - $rest)) }
+        $bytes = [Convert]::FromBase64String($cpassword)
+        $key = [byte[]](0x4e,0x99,0x06,0xe8,0xfc,0xb6,0x6c,0xc9,0xfa,0xf4,0x93,0x10,0x62,0x0f,0xfe,0xe8,
+                        0xf4,0x96,0xe8,0x06,0xcc,0x05,0x79,0x90,0x20,0x9b,0x09,0xa4,0x33,0xb6,0x6c,0x1b)
+        $aes = New-Object System.Security.Cryptography.AesManaged
+        $aes.Key = $key ; $aes.IV = New-Object byte[] 16 ; $aes.Mode = 'CBC' ; $aes.Padding = 'PKCS7'
+        $dec = $aes.CreateDecryptor()
+        $out = $dec.TransformFinalBlock($bytes, 0, $bytes.Length)
+        return [System.Text.Encoding]::Unicode.GetString($out)
+    } catch { return '<nicht entschluesselbar>' }
+}
+function chk_gpp_cpassword {
+    $dom = (Get-ADDomain).DNSRoot
+    $pol = "\\$dom\SYSVOL\$dom\Policies"
+    $namen = 'Groups.xml','Services.xml','ScheduledTasks.xml','DataSources.xml','Printers.xml','Drives.xml'
+    $treffer = @()
+    $dateien = @(Get-ChildItem -Path $pol -Recurse -Include $namen -ErrorAction SilentlyContinue)
+    foreach ($d in $dateien) {
+        $inhalt = Get-Content -LiteralPath $d.FullName -Raw -ErrorAction SilentlyContinue
+        if (-not $inhalt) { continue }
+        foreach ($m in [regex]::Matches($inhalt, 'cpassword="([^"]+)"')) {
+            $cp = $m.Groups[1].Value
+            if ([string]::IsNullOrEmpty($cp)) { continue }
+            $treffer += [pscustomobject]@{ Datei = $d.FullName.Replace($pol, '...'); Klar = (Entschluessle-GPP $cp) }
+        }
+    }
+    if ($treffer.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "GPP-cpassword-Fundstellen:" "$($treffer.Count)" "s" $fa
+    foreach ($x in $treffer) {
+        2werte " Datei: $($x.Datei)" "cpassword gefunden" "s" $F_Fehler
+        2werte "   Entschluesselt:" $x.Klar "s" $F_Fehler
+    }
+    if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine GPP-Passwoerter im SYSVOL" "s" "Green" }
+}
+function chk_sysvol_scripts {
+    $dom = (Get-ADDomain).DNSRoot
+    $basis = "\\$dom\SYSVOL\$dom"
+    $muster = 'net use\s.+/user:', '/user:\S+\s+\S', 'password\s*[:=]', '-AsPlainText',
+              'ConvertTo-SecureString', 'psexec.+\s-p\s', 'pwd\s*[:=]', 'passwd\s*[:=]'
+    $treffer = @()
+    $dateien = @(Get-ChildItem -Path $basis -Recurse -Include *.bat,*.cmd,*.ps1,*.vbs,*.kix -ErrorAction SilentlyContinue)
+    foreach ($d in $dateien) {
+        $inhalt = Get-Content -LiteralPath $d.FullName -Raw -ErrorAction SilentlyContinue
+        if (-not $inhalt) { continue }
+        foreach ($mu in $muster) {
+            if ($inhalt -match $mu) {
+                $treffer += [pscustomobject]@{ Datei = $d.FullName.Replace($basis, '...'); Muster = $mu }
+                break
+            }
+        }
+    }
+    if ($treffer.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "Verdaechtige Skripte (heuristisch):" "$($treffer.Count)" "s" $fa
+    foreach ($x in $treffer) { 2werte " $($x.Datei)" "Muster: $($x.Muster)" "s" $F_Fehler }
+    if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine auffaelligen Skripte gefunden" "s" "Green" }
+}
+function chk_gpo_rights {
+    $domDN = (Get-ADDomain).DistinguishedName
+    $gpos  = @(Get-ADObject -SearchBase "CN=Policies,CN=System,$domDN" `
+               -LDAPFilter '(objectClass=groupPolicyContainer)' -Properties displayName)
+    $gefaehr = 'GenericAll','GenericWrite','WriteDacl','WriteOwner','WriteProperty'
+    $tr = @()
+    foreach ($g in $gpos) {
+        try { $acl = Get-Acl -Path "AD:\$($g.DistinguishedName)" } catch { continue }
+        foreach ($ace in $acl.Access) {
+            if ($ace.AccessControlType -ne 'Allow') { continue }
+            $rechte = "$($ace.ActiveDirectoryRights)"
+            $hat = $false ; foreach ($r in $gefaehr) { if ($rechte -match $r) { $hat = $true; break } }
+            if ($hat -and (Ist-NiedrigPriv $ace.IdentityReference)) {
+                $tr += [pscustomobject]@{ GPO = "$($g.displayName)"; Wer = ("$($ace.IdentityReference)" -split '\\')[-1]; Recht = $rechte }
+            }
+        }
+    }
+    if ($tr.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
+    2werte "GPOs mit Schreibrecht fuer breite Gruppen:" "$($tr.Count)" "s" $fa
+    foreach ($x in $tr) { 2werte " GPO: $($x.GPO)" "Schreibrecht von $($x.Wer): $($x.Recht)" "s" $F_Fehler }
+    if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine GPO mit breitem Schreibrecht" "s" "Green" }
+}
+####################################################################################################
 ####################################################################################################
 ##### Main                                                                                     #####
 ####################################################################################################
@@ -4445,6 +4576,17 @@ if($adcschk -ge 1){
         Unterpruefung "ESC4 (manipulierbare Vorlagen-ACL)" 'esc4' { chk_esc4 }
         Unterpruefung "ESC6 (EDITF_ATTRIBUTESUBJECTALTNAME2 auf CA)" 'esc6' { chk_esc6 }
         Unterpruefung "ESC8 (HTTP Web Enrollment)" 'esc8' { chk_esc8 }
+    }
+}
+####################################################################################################
+## Bereich "GPO & SYSVOL - Geheimnisse" (Paket D)                                                  ##
+####################################################################################################
+if($sysvchk -ge 1){
+    Pruefbereich "GPO & SYSVOL - Geheimnisse" -CheckId 'gpo_sysvol' {
+        Leerzeile
+        Unterpruefung "GPP-Passwoerter (cpassword in SYSVOL)" 'gpp_cpassword' { chk_gpp_cpassword }
+        Unterpruefung "Klartext-Credentials in SYSVOL-Skripten" 'sysvol_scripts' { chk_sysvol_scripts }
+        Unterpruefung "GPO-Bearbeitungsrechte" 'gpo_rights' { chk_gpo_rights }
     }
 }
 ####################################################################################################

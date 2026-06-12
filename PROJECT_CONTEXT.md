@@ -123,6 +123,18 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Paket D – GPO/SYSVOL-Geheimnisse" (Juni 2026):**
+- Neuer Schalter `$sysvchk` (Default 1) und Bereich „GPO & SYSVOL – Geheimnisse".
+- Drei read-only Checks: **GPP-cpassword** (durchsucht SYSVOL-XMLs, entschlüsselt cpassword
+  mit dem öffentlichen AES-Schlüssel MS14-025 = Kritisch), **SYSVOL-Skripte** (heuristische
+  Mustersuche nach Klartext-Credentials in .bat/.cmd/.ps1/.vbs/.kix), **GPO-Bearbeitungsrechte**
+  (GPO-ACLs mit Schreibrecht für breite Gruppen, reuse `Ist-NiedrigPriv`).
+- Helfer `Entschluessle-GPP` (AES-256-CBC, Zero-IV, PKCS7, UTF-16); per Round-Trip-Test
+  **lokal verifiziert** (Krypto ist ohne AD prüfbar).
+- Vier neue Katalogeinträge (gpp_cpassword=Kritisch) mit Hintergrund + verifizierten Links
+  (MITRE T1552.006/.001, T1484.001, MS14-025/CVE-2014-1812).
+- Testsuite auf 78 Tests. **Datei-/SYSVOL-/ACL-Abfragen nicht lokal testbar -> DC-Test.**
+
 **v5.0 PR „Paket C Nachschliff: konkretere ESC-Befunde" (Juni 2026, nach DC-Lauf):**
 - ESC-Treffer jetzt klar beschriftet: „Vorlage: <Name>" plus die handlungsrelevante Info,
   **wer** die Vorlage anfordern darf (ESC1/ESC2/ESC3) bzw. welcher Prinzipal welches

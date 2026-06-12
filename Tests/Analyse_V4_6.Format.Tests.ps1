@@ -33,7 +33,7 @@ Describe 'Analyse_V4_6.ps1' {
         $zielFunktionen = @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                             'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
                             'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
-                            'Ausgabe','Puffer_leeren',
+                            'Ausgabe','Puffer_leeren','Entschluessle-GPP',
                             'Merken','Doku','Farbklasse','HTML_Report','JSON_Export')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
@@ -91,7 +91,7 @@ Describe 'Analyse_V4_6.ps1' {
         foreach ($n in @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
                          'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
                          'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
-                         'Ausgabe','Puffer_leeren',
+                         'Ausgabe','Puffer_leeren','Entschluessle-GPP',
                          'Merken','Doku','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
@@ -755,6 +755,45 @@ Describe 'Analyse_V4_6.ps1' {
 
         It 'der Schalter adcschk steht in der Override-Whitelist' {
             (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match "'adcschk'"
+        }
+    }
+
+    Context 'Paket D (v5.0): GPO/SYSVOL-Geheimnisse' {
+
+        It 'Katalog enthaelt alle Paket-D-Eintraege' {
+            foreach ($id in 'gpo_sysvol','gpp_cpassword','sysvol_scripts','gpo_rights') {
+                $global:CheckKatalog.Keys | Should -Contain $id
+            }
+        }
+
+        It 'GPP-cpassword-Eintrag ist als Kritisch eingestuft' {
+            $global:CheckKatalog['gpp_cpassword'].Schwere | Should -Be 'Kritisch'
+        }
+
+        It 'die Paket-D-Prueffunktionen sind im Skript definiert' {
+            $funktionen = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
+            }, $true) | ForEach-Object { $_.Name }
+            foreach ($fn in 'Entschluessle-GPP','chk_gpp_cpassword','chk_sysvol_scripts','chk_gpo_rights') {
+                $funktionen | Should -Contain $fn
+            }
+        }
+
+        It 'der Schalter sysvchk steht in der Override-Whitelist' {
+            (Get-Content -LiteralPath $skriptPfad -Raw) | Should -Match "'sysvchk'"
+        }
+
+        It 'Entschluessle-GPP entschluesselt einen mit dem GPP-Schluessel kodierten Wert korrekt' {
+            $klar = 'GeheimesP@ss1'
+            $key = [byte[]](0x4e,0x99,0x06,0xe8,0xfc,0xb6,0x6c,0xc9,0xfa,0xf4,0x93,0x10,0x62,0x0f,0xfe,0xe8,
+                            0xf4,0x96,0xe8,0x06,0xcc,0x05,0x79,0x90,0x20,0x9b,0x09,0xa4,0x33,0xb6,0x6c,0x1b)
+            $aes = New-Object System.Security.Cryptography.AesManaged
+            $aes.Key = $key ; $aes.IV = New-Object byte[] 16 ; $aes.Mode = 'CBC' ; $aes.Padding = 'PKCS7'
+            $enc = $aes.CreateEncryptor()
+            $pt  = [System.Text.Encoding]::Unicode.GetBytes($klar)
+            $ct  = $enc.TransformFinalBlock($pt, 0, $pt.Length)
+            $cpassword = [Convert]::ToBase64String($ct)
+            (Entschluessle-GPP $cpassword) | Should -Be $klar
         }
     }
 
