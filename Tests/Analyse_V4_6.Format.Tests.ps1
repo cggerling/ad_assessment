@@ -747,7 +747,7 @@ Describe 'Analyse_V4_6.ps1' {
             $funktionen = $ast.FindAll({
                 param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
             }, $true) | ForEach-Object { $_.Name }
-            foreach ($fn in 'Get-ADCSObjekte','Ist-NiedrigPriv','Hat-NiedrigPrivEnroll',
+            foreach ($fn in 'Get-ADCSObjekte','Ist-NiedrigPriv','Get-NiedrigPrivEnroller',
                             'chk_esc1','chk_esc2_3','chk_esc4','chk_esc6','chk_esc8') {
                 $funktionen | Should -Contain $fn
             }

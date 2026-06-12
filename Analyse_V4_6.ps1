@@ -4203,18 +4203,23 @@ function Get-ADCSObjekte {
     $pub  = @($cas | ForEach-Object { $_.certificateTemplates } | Where-Object { $_ } | Sort-Object -Unique)
     [pscustomobject]@{ Templates = $tmpl; CAs = $cas; Published = $pub }
 }
-function Hat-NiedrigPrivEnroll ($dn) {
+function Get-NiedrigPrivEnroller ($dn) {
+    # Liefert die breiten/niedrig privilegierten Prinzipale mit Enroll-Recht (leer = keine).
     $enrollGuid = '0e10c968-78fb-11d2-90d4-00c04f79dc55'   # Certificate-Enrollment
     $autoGuid   = 'a05b8cc2-17bc-4802-a710-e7c15ab866a2'   # Auto-Enrollment
-    try { $acl = Get-Acl -Path "AD:\$dn" } catch { return $false }
+    $res = @()
+    try { $acl = Get-Acl -Path "AD:\$dn" } catch { return @() }
     foreach ($ace in $acl.Access) {
         if ($ace.AccessControlType -ne 'Allow') { continue }
         $g = "$($ace.ObjectType)"
         $rechte = "$($ace.ActiveDirectoryRights)"
         $istEnroll = ($g -eq $enrollGuid -or $g -eq $autoGuid -or $rechte -match 'GenericAll')
-        if ($istEnroll -and (Ist-NiedrigPriv $ace.IdentityReference)) { return $true }
+        if ($istEnroll -and (Ist-NiedrigPriv $ace.IdentityReference)) {
+            $kurz = ("$($ace.IdentityReference)" -split '\\')[-1]
+            if ($res -notcontains $kurz) { $res += $kurz }
+        }
     }
-    return $false
+    return $res
 }
 function chk_adcs_inventory {
     $o = Get-ADCSObjekte
@@ -4234,11 +4239,15 @@ function chk_esc1 {
         $ekus = @($t.pKIExtendedKeyUsage) + @($t.'msPKI-Certificate-Application-Policy') | Where-Object { $_ }
         $hatAuth = ($ekus.Count -eq 0) -or (@($ekus | Where-Object { $authEku -contains $_ }).Count -gt 0)
         if (-not $hatAuth) { continue }
-        if (Hat-NiedrigPrivEnroll $t.DistinguishedName) { $treffer += "$($t.displayName)" }
+        $enroller = @(Get-NiedrigPrivEnroller $t.DistinguishedName)
+        if ($enroller.Count -gt 0) { $treffer += [pscustomobject]@{ Name = "$($t.displayName)"; Enroll = ($enroller -join ', ') } }
     }
     if ($treffer.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
     2werte "ESC1-verdaechtige Vorlagen:" "$($treffer.Count)" "s" $fa
-    foreach ($x in $treffer) { 2werte " $x" "Subject frei + Auth-EKU + Enroll fuer breite Gruppe" "s" $F_Fehler }
+    foreach ($x in $treffer) {
+        2werte " Vorlage: $($x.Name)" "ESC1 (Subject frei + Auth-EKU, kein Approval)" "s" $F_Fehler
+        2werte "   Enroll fuer:" $x.Enroll "s" $F_Fehler
+    }
     if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine ESC1-Vorlage gefunden" "s" "Green" }
 }
 function chk_esc2_3 {
@@ -4251,14 +4260,18 @@ function chk_esc2_3 {
         $isAny = ($ekus.Count -eq 0) -or ($ekus -contains $anyPurpose)
         $isAgent = $ekus -contains $enrollAgent
         if (-not ($isAny -or $isAgent)) { continue }
-        if (Hat-NiedrigPrivEnroll $t.DistinguishedName) {
+        $enroller = @(Get-NiedrigPrivEnroller $t.DistinguishedName)
+        if ($enroller.Count -gt 0) {
             $typ = if ($isAgent) { 'ESC3 (Enrollment Agent)' } else { 'ESC2 (Any Purpose/kein EKU)' }
-            $tr += [pscustomobject]@{ Name = "$($t.displayName)"; Typ = $typ }
+            $tr += [pscustomobject]@{ Name = "$($t.displayName)"; Typ = $typ; Enroll = ($enroller -join ', ') }
         }
     }
     if ($tr.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
     2werte "ESC2/ESC3-verdaechtige Vorlagen:" "$($tr.Count)" "s" $fa
-    foreach ($x in $tr) { 2werte " $($x.Name)" $x.Typ "s" $F_Fehler }
+    foreach ($x in $tr) {
+        2werte " Vorlage: $($x.Name)" $x.Typ "s" $F_Fehler
+        2werte "   Enroll fuer:" $x.Enroll "s" $F_Fehler
+    }
     if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine ESC2/ESC3-Vorlage gefunden" "s" "Green" }
 }
 function chk_esc4 {
@@ -4272,13 +4285,13 @@ function chk_esc4 {
             $rechte = "$($ace.ActiveDirectoryRights)"
             $hat = $false ; foreach ($r in $gefaehr) { if ($rechte -match $r) { $hat = $true; break } }
             if ($hat -and (Ist-NiedrigPriv $ace.IdentityReference)) {
-                $tr += [pscustomobject]@{ Name = "$($t.displayName)"; Wer = "$($ace.IdentityReference)" }
+                $tr += [pscustomobject]@{ Name = "$($t.displayName)"; Wer = ("$($ace.IdentityReference)" -split '\\')[-1]; Recht = $rechte }
             }
         }
     }
     if ($tr.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
     2werte "ESC4 (Vorlagen mit Schreibrecht fuer breite Gruppen):" "$($tr.Count)" "s" $fa
-    foreach ($x in $tr) { 2werte " $($x.Name)" "Schreibrecht: $($x.Wer)" "s" $F_Fehler }
+    foreach ($x in $tr) { 2werte " Vorlage: $($x.Name)" "Schreibrecht von $($x.Wer): $($x.Recht)" "s" $F_Fehler }
     if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine ESC4-Vorlage gefunden" "s" "Green" }
 }
 function chk_esc6 {

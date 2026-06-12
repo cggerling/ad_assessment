@@ -123,6 +123,14 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**v5.0 PR „Paket C Nachschliff: konkretere ESC-Befunde" (Juni 2026, nach DC-Lauf):**
+- ESC-Treffer jetzt klar beschriftet: „Vorlage: <Name>" plus die handlungsrelevante Info,
+  **wer** die Vorlage anfordern darf (ESC1/ESC2/ESC3) bzw. welcher Prinzipal welches
+  Schreibrecht hat (ESC4). Neuer Helfer `Get-NiedrigPrivEnroller` (ersetzt
+  `Hat-NiedrigPrivEnroll`, liefert die Prinzipal-Namen statt nur bool).
+- DC-Lauf (Lab it-pirate) fand korrekt: 1x ESC1 (UserAzureStrong), 11x ESC4,
+  ESC8 (Web Enrollment installiert) — die Checks arbeiten also wie gewünscht.
+
 **v5.0 PR „Paket C – AD CS / ESC1–8" (Juni 2026):**
 - Neuer Schalter `$adcschk` (Default 1, in Whitelist) und Bereich „AD CS – Zertifikatsdienste (ESC)".
 - Read-only über AD-Objekte unter `CN=Public Key Services` (Configuration-NC) + `certutil`:
