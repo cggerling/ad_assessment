@@ -31,7 +31,7 @@ Describe 'AD-Analyse-V5.ps1' {
 
         ### Formatierungs-Funktionen extrahieren und global definieren #############################
         $zielFunktionen = @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
-                            'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
+                            'Bereich','Phase','Bereichstitel','Subtitel','2werte','new_2werte',
                             'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                             'Ausgabe','Puffer_leeren','Entschluessle-GPP',
                             'Merken','Doku','Farbklasse','HTML_Report','JSON_Export',
@@ -90,7 +90,7 @@ Describe 'AD-Analyse-V5.ps1' {
     AfterAll {
         Remove-Item -LiteralPath $global:path -Force -ErrorAction SilentlyContinue
         foreach ($n in @('Header','Bottom','Vollzeile','Leerzeile','Trennzeile','tablinie',
-                         'Bereich','Bereichstitel','Subtitel','2werte','new_2werte',
+                         'Bereich','Phase','Bereichstitel','Subtitel','2werte','new_2werte',
                          'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                          'Ausgabe','Puffer_leeren','Entschluessle-GPP',
                          'Merken','Doku','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen',
@@ -971,6 +971,54 @@ Describe 'AD-Analyse-V5.ps1' {
             }
             $geteilt = @($bereichIds | Where-Object { $unterIds -contains $_ })
             $geteilt | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'Zwei-Phasen-Struktur (Recon / Schwachstellen)' {
+
+        It 'Hauptablauf trennt Phase 1 (Recon) und Phase 2 (Schwachstellen) sauber' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $p1 = $inhalt.IndexOf('Phase "PHASE 1')
+            $p2 = $inhalt.IndexOf('Phase "PHASE 2')
+            $p1 | Should -BeGreaterThan 0
+            $p2 | Should -BeGreaterThan $p1
+            # Reconnaissance-Bereiche stehen zwischen Phase-1- und Phase-2-Banner
+            foreach ($id in 'domain_allgemein','admins','benutzer','ad_gruppen','ca') {
+                $pos = $inhalt.IndexOf("-CheckId '$id'")
+                $pos | Should -BeGreaterThan $p1
+                $pos | Should -BeLessThan $p2
+            }
+            # Schwachstellen-/Posture-Bereiche stehen nach dem Phase-2-Banner
+            foreach ($id in 'ddp_password','user_vs_pw','logging','kerberos','privilegien','adcs','gpo_sysvol','dc_detail','dc_haertung') {
+                $inhalt.IndexOf("-CheckId '$id'") | Should -BeGreaterThan $p2
+            }
+        }
+
+        It 'Phase erzeugt ein Phase-Ereignis und einen ===-Banner im Report' {
+            Phase 'TESTPHASE'
+            ($global:R_Daten | Where-Object { $_.Art -eq 'Phase' -and $_.Titel -eq 'TESTPHASE' }) |
+                Should -Not -BeNullOrEmpty
+            $z = Get-ReportZeilen
+            ($z -join "`n") | Should -Match 'TESTPHASE'
+            (@($z) | Where-Object { $_ -match '^={10,}$' }).Count | Should -BeGreaterOrEqual 2
+        }
+
+        It 'HTML_Report rendert Phasen-Ueberschriften und gruppiert die Zusammenfassung' {
+            $global:R_Daten.Clear()
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Phase'; Titel='PHASE 1 - RECON' })
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Bereich'; Titel='B-eins' })
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Doku'; CheckId='c1'; DTitel='Check Eins'; Schwere='Info'; Zweck='z'; Hintergrund=''; Beispiel='b'; Empfehlung='e'; Quellen='q' })
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Phase'; Titel='PHASE 2 - SCHWACH' })
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Bereich'; Titel='B-zwei' })
+            [void]$global:R_Daten.Add([pscustomobject]@{ Art='Doku'; CheckId='c2'; DTitel='Check Zwei'; Schwere='Hoch'; Zweck='z'; Hintergrund=''; Beispiel='b'; Empfehlung='e'; Quellen='q' })
+            HTML_Report
+            $htmlPfad = [System.IO.Path]::ChangeExtension($global:path, 'html')
+            $html = Get-Content -LiteralPath $htmlPfad -Raw -Encoding UTF8
+            $html | Should -Match '<h2 class="phase">PHASE 1 - RECON</h2>'
+            $html | Should -Match '<h2 class="phase">PHASE 2 - SCHWACH</h2>'
+            $html | Should -Match '<h3>PHASE 1 - RECON</h3>'
+            $html | Should -Match '<h3>PHASE 2 - SCHWACH</h3>'
+            Remove-Item $htmlPfad -Force -ErrorAction SilentlyContinue
         }
     }
 

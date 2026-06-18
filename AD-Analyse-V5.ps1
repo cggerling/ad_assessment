@@ -1056,6 +1056,24 @@ function Bereich ($Wert1) {                                                     
         Ausgabe $zeile1u3                                                                          #
     }                                                                                              #
 }                                                                                                  #
+function Phase ($titel) {
+    ### Grosser Phasen-Banner (===) - trennt die beiden Report-Phasen voneinander ################
+    # Wird im Text-Report als ===-Banner und im HTML-Report als Phasen-Ueberschrift dargestellt;
+    # gruppiert zugleich die Executive Summary nach Phase.
+    Merken 'Phase' @{ Titel = $titel }
+    $voll = '=' * $sb
+    $la   = '===' + $leer ; $re = $leer + '==='
+    $pad  = $sb - $la.Length - $re.Length - "$titel".Length ; if ($pad -lt 0) { $pad = 0 }
+    $mitte = "$la$titel" + ($leer * $pad) + $re
+    $leerz = $la + ($leer * ($sb - $la.Length - $re.Length)) + $re
+    if ($A_Con -eq 1) {
+        Write-Host ''
+        foreach ($z in @($voll, $leerz, $mitte, $leerz, $voll)) { Write-Host $z -ForegroundColor $F_Ue_Schrift }
+    }
+    if ($A_Dat -eq 1) {
+        Ausgabe '' ; foreach ($z in @($voll, $leerz, $mitte, $leerz, $voll)) { Ausgabe $z }
+    }
+}
 function Bereichstitel ($Wert1,$sub) {                                                             #
     ### Legende ####################################################################################
     # Wert1  = Dieser Wert wird als Bereichstitel links plaziert                                   #
@@ -1492,6 +1510,8 @@ function HTML_Report {
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;max-width:960px;margin:0 auto;padding:1.5rem 1rem 3rem;background:var(--bg);color:var(--text);line-height:1.5}
 h1{font-size:1.9rem;margin:.5rem 0 .2rem}
 h2{font-size:1.35rem;margin:2.2rem 0 .6rem;padding-bottom:.25rem;border-bottom:2px solid var(--accent);scroll-margin-top:.5rem}
+h2.phase{font-size:1.65rem;margin:3rem 0 1rem;padding:.4rem 0;border-top:3px solid var(--text);border-bottom:3px solid var(--text);text-align:center;letter-spacing:.04em}
+.zus h3{margin:.8rem 0 .2rem;font-size:1rem}
 h3{font-size:1.1rem;margin:1.5rem 0 .4rem}
 h4{font-size:1rem;margin:1.1rem 0 .3rem;color:var(--muted)}
 p{margin:.4rem 0}
@@ -1545,17 +1565,30 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
     ### Zusammenfassung: Pruefbereiche nach Einstufung, mit Sprungmarken ##########################
     $dokus = @($R_Daten | Where-Object { $_.Art -eq 'Doku' })
     if ($dokus.Count -gt 0) {
+        # Jede Begruendung (Doku) ihrer Phase zuordnen (in Reihenfolge der Ereignisse),
+        # damit die Zusammenfassung nach Reconnaissance / Schwachstellen gegliedert ist.
+        $dokuListe = New-Object System.Collections.ArrayList
+        $curPhase = ''
+        foreach ($e in $R_Daten) {
+            if ($e.Art -eq 'Phase') { $curPhase = "$($e.Titel)" }
+            elseif ($e.Art -eq 'Doku') { [void]$dokuListe.Add([pscustomobject]@{ Phase = $curPhase; D = $e }) }
+        }
         $cnt = [ordered]@{ Kritisch = 0; Hoch = 0; Mittel = 0; Niedrig = 0; Info = 0 }
         foreach ($d in $dokus) { if ($cnt.Contains("$($d.Schwere)")) { $cnt["$($d.Schwere)"]++ } }
         [void]$H.AppendLine('<section class="zus">')
         [void]$H.AppendLine('<h2>Zusammenfassung</h2>')
         $teile = foreach ($s in $cnt.Keys) { "<span class=""badge $(SevKlasse $s)"">$s $($cnt[$s])</span>" }
         [void]$H.AppendLine("<div class=""counts"">$($teile -join ' ')</div>")
-        [void]$H.AppendLine('<ul>')
-        foreach ($d in $dokus) {
-            [void]$H.AppendLine("<li><a href=""#chk-$($d.CheckId)"">$(Esc $d.DTitel)</a> <span class=""badge $(SevKlasse $d.Schwere)"">$(Esc $d.Schwere)</span></li>")
+        $phasen = @($dokuListe | ForEach-Object { $_.Phase } | Select-Object -Unique)
+        foreach ($ph in $phasen) {
+            if ($ph) { [void]$H.AppendLine("<h3>$(Esc $ph)</h3>") }
+            [void]$H.AppendLine('<ul>')
+            foreach ($item in @($dokuListe | Where-Object { $_.Phase -eq $ph })) {
+                $d = $item.D
+                [void]$H.AppendLine("<li><a href=""#chk-$($d.CheckId)"">$(Esc $d.DTitel)</a> <span class=""badge $(SevKlasse $d.Schwere)"">$(Esc $d.Schwere)</span></li>")
+            }
+            [void]$H.AppendLine('</ul>')
         }
-        [void]$H.AppendLine('</ul>')
         [void]$H.AppendLine('<p class="meta">Hinweis: Die Einstufung bewertet die Wichtigkeit des Prüfbereichs, nicht zwingend einen konkreten Befund. Begründung und Empfehlung je Bereich im jeweiligen Block "Hintergrund &amp; Empfehlung".</p>')
         [void]$H.AppendLine('</section>')
     }
@@ -1566,6 +1599,9 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
             [void]$H.AppendLine('</table>') ; $offen = ''
         }
         switch ($e.Art) {
+            'Phase'    {
+                [void]$H.AppendLine("<h2 class=""phase"">$(Esc $e.Titel)</h2>")
+            }
             'Bereich'  {
                 # Folgt direkt ein Doku-Ereignis, bekommt die Ueberschrift Anker-ID und Severity-Badge.
                 $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
@@ -4674,63 +4710,45 @@ Clear-Host
 Header $type $maintitel
 Puffer_leeren
 ####################################################################################################
-## Bereich Domain, Mode, FSMO                                                                     ##
+## PHASE 1 - Reconnaissance (Bestandsaufnahme / Enumeration)                                      ##
 ####################################################################################################
+Phase "PHASE 1 - RECONNAISSANCE (Bestandsaufnahme)"
+
 if($domoco -ge 1){
     Pruefbereich "Domain, Mode, FSMO" -CheckId 'domain_allgemein' {
         Leerzeile
         dom_allgemein
     }
 }
-####################################################################################################
-## Bereich "Central Store & Templates"                                                            ##
-####################################################################################################
+
 if($censto -ge 1 -or $sectem -ge 1){
     Pruefbereich "Central Store & Templates" -CheckId 'central_store' {
         if($censto -ge 1){ centralstore }
         if($sectem -ge 1){ sec_templates }
     }
 }
-####################################################################################################
-## Bereich Domain Controller                                                                      ##
-####################################################################################################
+
 if ($domdcs -ge 1) {
     Pruefbereich "Domain Controller" -CheckId 'domain_controller' {
         Leerzeile
         controller
     }
 }
-####################################################################################################
-## Bereich "Logging auf Domain Controller(n)"                                                     ##
-####################################################################################################
-if($loggin -ge 1){
-    Pruefbereich "Logging auf Domain Controller(n)" -CheckId 'logging' {
-        Leerzeile
-        Event_dienst
-        Auditcheck
-    }
-}
-####################################################################################################
-## Bereich "AD-Trusts - Check"                                                                    ##
-####################################################################################################
+
 if($adtchk -ge 1){
     Pruefbereich "AD-Trusts - Check" -CheckId 'trusts' {
         Leerzeile
         trusts
     }
 }
-####################################################################################################
-## Bereich "DNS - Check"                                                                          ##
-####################################################################################################
+
 if($dnschk -ge 1){
     Pruefbereich "DNS - Check" -CheckId 'dns' {
         Leerzeile
         aging
     }
 }
-####################################################################################################
-## Bereich "Sysvol Replication & AD-Health"                                                       ##
-####################################################################################################
+
 if($SysRep -ge 1){
     Pruefbereich "Sysvol Replication & AD-Health" -CheckId 'sysvol_health' {
         Leerzeile
@@ -4738,9 +4756,7 @@ if($SysRep -ge 1){
         controller_check
     }
 }
-####################################################################################################
-## Bereich "Administratoren und Builtin Benutzer"                                                 ##
-####################################################################################################
+
 if($admusr -ge 1){
     Pruefbereich "Administratoren und Builtin Benutzer" -CheckId 'admins' {
         Leerzeile
@@ -4751,9 +4767,120 @@ if($admusr -ge 1){
         if($priusr -eq 1) { AdmCount }
     }
 }
+
+if ($usrchk -eq 1) {
+    Pruefbereich "Benutzer und Benutzer Accounts" -CheckId 'benutzer' {
+        Leerzeile
+        User_chk
+        if($inachk -eq 1) { inaktive_User }
+        if($geschk -eq 1) { gesperrte_User }
+        if($falchk -eq 1) { ou_users }
+    }
+}
+
+if ($syschk -eq 1) {
+    Pruefbereich 'Computerkonten Check' -CheckId 'computerkonten' {
+        Leerzeile
+        sys_konten
+    }
+}
+
+if($cltchk -ge 1){
+    Pruefbereich "Client Check" -CheckId 'clients' {
+        Leerzeile
+        clt_chk
+    }
+}
+
+if($srvchk -ge 1){
+    Pruefbereich "Server Check" -CheckId 'server' {
+        Leerzeile
+        srv_chk
+    }
+}
+
+if($no_win -eq 1){
+    Pruefbereich 'Nicht "Windows" Systeme' -CheckId 'nicht_windows' {
+        Leerzeile
+        oth_chk
+    }
+}
+
+if($allgru -ge 1){
+    Pruefbereich "AD-Gruppen" -CheckId 'ad_gruppen' {
+        Leerzeile
+        ad_gruppen
+    }
+}
+
+if($allgpo -ge 1){
+    Pruefbereich "GPO's" -CheckId 'gpos' {
+        Leerzeile
+        GPO_all
+        Leerzeile
+    }
+}
+
+if($OrgUni -ge 1){
+    Pruefbereich "Organisation Units" -CheckId 'ous' {
+        Leerzeile
+        OUS
+    }
+}
+
+if($manacc -ge 1){
+    Pruefbereich "Managed Service Accounts (MSA/gMSA)" -CheckId 'msa' {
+        Leerzeile
+        KDSR
+        MSA
+        gMSA
+    }
+}
+
+if($caschk -ge 1){
+    Pruefbereich "Zertifizierungsstelle(n)" -CheckId 'ca' {
+        Leerzeile
+        ca_root
+        ca_sub
+        #ca_templates
+    }
+}
+
 ####################################################################################################
-## Bereich "Kerberos - Angriffsflächen" (Paket A)                                                ##
+## PHASE 2 - Sicherheitsluecken / Schwachstellen (Assessment)                                     ##
 ####################################################################################################
+Phase "PHASE 2 - SICHERHEITSLÜCKEN / SCHWACHSTELLEN"
+
+if($dDPchk -ge 1){
+    Pruefbereich "dDP Password Settings" -CheckId 'ddp_password' {
+        Leerzeile
+        ddomainpol
+        #spezial_user
+    }
+}
+
+if($fgppch -ge 1){
+    Pruefbereich "fine Grained Password Policies" -CheckId 'fgpp' {
+        Leerzeile
+        fGPO
+    }
+}
+
+if($userpw -ge 1){
+    Pruefbereich "User vs Password Policies" -CheckId 'user_vs_pw' {
+        Leerzeile
+        spezial_user
+    }
+}
+
+if($loggin -ge 1){
+    Pruefbereich "Logging auf Domain Controller(n)" -CheckId 'logging' {
+        Leerzeile
+        Event_dienst
+        Auditcheck
+    }
+}
+
 if($kerbchk -ge 1){
     Pruefbereich "Kerberos - Angriffsflächen" -CheckId 'kerberos' {
         Leerzeile
@@ -4764,9 +4891,7 @@ if($kerbchk -ge 1){
         Unterpruefung "Computerkonten-Kontingent (MachineAccountQuota)" 'machine_quota' { chk_machine_quota }
     }
 }
-####################################################################################################
-## Bereich "Privilegien & ACLs" (Paket B)                                                         ##
-####################################################################################################
+
 if($privchk -ge 1){
     Pruefbereich "Privilegien & ACLs" -CheckId 'privilegien' {
         Leerzeile
@@ -4777,9 +4902,7 @@ if($privchk -ge 1){
         Unterpruefung "Pre-Windows 2000 Compatible Access" 'prewin2000' { chk_prewin2000 }
     }
 }
-####################################################################################################
-## Bereich "AD CS - Zertifikatsdienste (ESC)" (Paket C)                                            ##
-####################################################################################################
+
 if($adcschk -ge 1){
     Pruefbereich "AD CS - Zertifikatsdienste (ESC)" -CheckId 'adcs' {
         Leerzeile
@@ -4791,9 +4914,7 @@ if($adcschk -ge 1){
         Unterpruefung "ESC8 (HTTP Web Enrollment)" 'esc8' { chk_esc8 }
     }
 }
-####################################################################################################
-## Bereich "GPO & SYSVOL - Geheimnisse" (Paket D)                                                  ##
-####################################################################################################
+
 if($sysvchk -ge 1){
     Pruefbereich "GPO & SYSVOL - Geheimnisse" -CheckId 'gpo_sysvol' {
         Leerzeile
@@ -4802,9 +4923,14 @@ if($sysvchk -ge 1){
         Unterpruefung "GPO-Bearbeitungsrechte" 'gpo_rights' { chk_gpo_rights }
     }
 }
-####################################################################################################
-## Bereich "DC-Härtung (vertieft)" (Paket E)                                                      ##
-####################################################################################################
+
+if ($DomCon -ge 1) {
+    Pruefbereich "Domain Controller" -CheckId 'dc_detail' {
+        Leerzeile
+        AD_Controller
+    }
+}
+
 if($dchaert -ge 1){
     Pruefbereich "DC-Härtung (vertieft)" -CheckId 'dc_haertung' {
         Leerzeile
@@ -4814,154 +4940,13 @@ if($dchaert -ge 1){
         Unterpruefung "Anonyme LDAP-Binds (dSHeuristics)" 'anon_ldap' { chk_anon_ldap }
     }
 }
+
 ####################################################################################################
-## Bereich "Benutzer und Benutzer Accounts"                                                       ##
+## Abschluss: Veraenderungen seit letztem Lauf (Delta)                                            ##
 ####################################################################################################
-if ($usrchk -eq 1) {
-    Pruefbereich "Benutzer und Benutzer Accounts" -CheckId 'benutzer' {
-        Leerzeile
-        User_chk
-        if($inachk -eq 1) { inaktive_User }
-        if($geschk -eq 1) { gesperrte_User }
-        if($falchk -eq 1) { ou_users }
-    }
-}
-####################################################################################################
-## Bereich "Computerkonten Check"                                                                 ##
-####################################################################################################
-if ($syschk -eq 1) {
-    Pruefbereich 'Computerkonten Check' -CheckId 'computerkonten' {
-        Leerzeile
-        sys_konten
-    }
-}
-####################################################################################################
-## Bereich "Client Check"                                                                         ##
-####################################################################################################
-if($cltchk -ge 1){
-    Pruefbereich "Client Check" -CheckId 'clients' {
-        Leerzeile
-        clt_chk
-    }
-}
-####################################################################################################
-## Bereich "Client Check"                                                                         ##
-####################################################################################################
-if($srvchk -ge 1){
-    Pruefbereich "Server Check" -CheckId 'server' {
-        Leerzeile
-        srv_chk
-    }
-}
-####################################################################################################
-## Bereich "Nicht Windows Systeme"                                                                ##
-####################################################################################################
-if($no_win -eq 1){
-    Pruefbereich 'Nicht "Windows" Systeme' -CheckId 'nicht_windows' {
-        Leerzeile
-        oth_chk
-    }
-}
-####################################################################################################
-## Bereich "AD-Gruppen"                                                                           ##
-####################################################################################################
-if($allgru -ge 1){
-    Pruefbereich "AD-Gruppen" -CheckId 'ad_gruppen' {
-        Leerzeile
-        ad_gruppen
-    }
-}
-####################################################################################################
-## Bereich "GPO's"                                                                                ##
-####################################################################################################
-if($allgpo -ge 1){
-    Pruefbereich "GPO's" -CheckId 'gpos' {
-        Leerzeile
-        GPO_all
-        Leerzeile
-    }
-}
-####################################################################################################
-## Bereich "dDP Password Settings"                                                                ##
-####################################################################################################
-if($dDPchk -ge 1){
-    Pruefbereich "dDP Password Settings" -CheckId 'ddp_password' {
-        Leerzeile
-        ddomainpol
-        #spezial_user
-    }
-}
-####################################################################################################
-## Bereich "fGPP - fine Grained Password Policies"                                                ##
-####################################################################################################
-if($fgppch -ge 1){
-    Pruefbereich "fine Grained Password Policies" -CheckId 'fgpp' {
-        Leerzeile
-        fGPO
-    }
-}
-####################################################################################################
-## Bereich "User vs Password Policies"                                                            ##
-####################################################################################################
-if($userpw -ge 1){
-    Pruefbereich "User vs Password Policies" -CheckId 'user_vs_pw' {
-        Leerzeile
-        spezial_user
-    }
-}
-####################################################################################################
-## Bereich "Organisation Units"                                                                   ##
-####################################################################################################
-if($OrgUni -ge 1){
-    Pruefbereich "Organisation Units" -CheckId 'ous' {
-        Leerzeile
-        OUS
-    }
-}
-####################################################################################################
-## Bereich "DACL, Rechte-Delegierung"                                                             ##
-####################################################################################################
-#if($aclchk -ge 1){
-#    Bereich "DACL, Rechte-Delegierung"
-#    Leerzeile
-#    dacls
-#    Leerzeile
-#}
-####################################################################################################
-## Bereich "Managed Service Accounts (MSA/gMSA)"                                                  ##
-####################################################################################################
-if($manacc -ge 1){
-    Pruefbereich "Managed Service Accounts (MSA/gMSA)" -CheckId 'msa' {
-        Leerzeile
-        KDSR
-        MSA
-        gMSA
-    }
-}
-####################################################################################################
-## Bereich "Zertifizierungsstelle(n)"                                                             ##
-####################################################################################################
-if($caschk -ge 1){
-    Pruefbereich "Zertifizierungsstelle(n)" -CheckId 'ca' {
-        Leerzeile
-        ca_root
-        ca_sub
-        #ca_templates
-    }
-}
-####################################################################################################
-## Bereich "Domain Controller"                                                                    ##
-####################################################################################################
-if ($DomCon -ge 1) {
-    Pruefbereich "Domain Controller" -CheckId 'dc_detail' {
-        Leerzeile
-        AD_Controller
-    }
-}
-####################################################################################################
-## Bereich "Veränderungen seit letztem Lauf (Delta)" (Paket F)                                    ##
-####################################################################################################
+
 if ($deltchk -ge 1 -and $Vergleich) {
+    Phase "ABSCHLUSS - VERÄNDERUNGEN SEIT LETZTEM LAUF (DELTA)"
     Pruefbereich "Veränderungen seit letztem Lauf (Delta)" -CheckId 'delta' {
         Leerzeile
         # CheckId $null: die Doku/Begruendung kommt bereits vom Pruefbereich 'delta' -
@@ -4969,6 +4954,7 @@ if ($deltchk -ge 1 -and $Vergleich) {
         Unterpruefung "Vergleich mit früherem JSON-Export" $null { chk_delta $Vergleich }
     }
 }
+
 ####################################################################################################
 ## Bereich Abschluss Script                                                                       ##
 ####################################################################################################
