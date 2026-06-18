@@ -123,6 +123,19 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Bugfix „dcdienste: Enter-PSSession → Invoke-Command" (Juni 2026):**
+- `dcdienste` (Dienst-Inventar je DC, DC-Detailmodus `DomCon=2`) nutzte `Enter-PSSession`/
+  `Exit-PSSession` — im nicht-interaktiven Skript wirkungslos, die `Get-Service`/`Get-WmiObject`
+  liefen lokal statt auf dem Ziel-DC. Jetzt sammelt die Funktion alle Werte read-only via
+  `Invoke-Command -ComputerName $dcho` (Zählungen auf Live-Objekten, Status/Starttyp als String
+  zurückgegeben → robust gegen Deserialisierung); Ausgabe bleibt lokal. Counts zudem
+  `@(...).Count`-sicher (Einzeltreffer-Problem).
+- **Read-only bestätigt:** vollständiges Audit ergab keine schreibenden AD-/GPO-/Registry-/
+  Dienst-/ADSI-Operationen; einzige Schreibziele sind der Ergebnisordner + Reportdateien sowie
+  (transient, selbstgelöscht) zwei `secedit /export`-Temp-Dateien je DC in dessen %TEMP%.
+- Neuer statischer Regressionstest: Skript enthält kein `Enter-/Exit-PSSession` mehr;
+  `dcdienste` nutzt `Invoke-Command -ComputerName $dcho`. Testsuite **90 → 91**, grün PS 7 + 5.1.
+
 **v5.0 PR „Paket F – Delta-Modus / Zeitvergleich" (Juni 2026):**
 - Neuer Parameter `-Vergleich <Pfad>` (+ Schalter `$deltchk`, Default 1) und Bereich
   „Veränderungen seit letztem Lauf (Delta)". Läuft **nur**, wenn `-Vergleich` gesetzt ist,

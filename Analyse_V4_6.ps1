@@ -3858,23 +3858,39 @@ function dcdienste ($dcho) {
     $dienste += "wisvc"
     $dienste += "icssvc"
     ################################################################################################
-    Enter-PSSession $dcho
-    $dienst = Get-Service -Name *
-    $anzges = (Get-Service -Name *).count
-    $anzdis = (Get-Service -Name * | Where-Object {($_.StartType -eq "Disabled")}).count
-    $anzman = (Get-Service -Name * | Where-Object {($_.StartType -eq "Manual")}).count
-    $anzaut = (Get-Service -Name * | Where-Object {($_.StartType -eq "Automatic")}).count
-    $anzrun = (Get-Service -Name * | Where-Object {($_.Status -eq "Running")}).count
-    $anzsto = (Get-Service -Name * | Where-Object {($_.Status -eq "Stopped")}).count
-    $lokcon = Get-WmiObject win32_service | Where-Object {($_.startname -ne "LocalSystem")`
-    -and ($_.startname -ne "NT AUTHORITY\NetworkService")`
-    -and ($_.startname -ne "NT AUTHORITY\NETWORK SERVICE")`
-    -and ($_.startname -ne "NT AUTHORITY\LocalService") }
-    $Lokanz = (Get-WmiObject win32_service | Where-Object {($_.startname -ne "LocalSystem")`
-    -and ($_.startname -ne "NT AUTHORITY\NetworkService")`
-    -and ($_.startname -ne "NT AUTHORITY\NETWORK SERVICE")`
-    -and ($_.startname -ne "NT AUTHORITY\LocalService") }).count
-    Exit-PSSession
+    # Datensammlung remote auf dem DC (read-only); Ausgabe erfolgt anschliessend lokal.
+    # (frueher: Enter-/Exit-PSSession - im Skript-Kontext wirkungslos, lief lokal statt remote)
+    $remote = Invoke-Command -ComputerName $dcho -ScriptBlock {
+        $alle = Get-Service -Name *
+        $wmi  = Get-WmiObject win32_service | Where-Object {
+                    ($_.startname -ne "LocalSystem") -and
+                    ($_.startname -ne "NT AUTHORITY\NetworkService") -and
+                    ($_.startname -ne "NT AUTHORITY\NETWORK SERVICE") -and
+                    ($_.startname -ne "NT AUTHORITY\LocalService") }
+        # Status/Starttyp als String, damit die Werte die Deserialisierung sauber ueberstehen.
+        [pscustomobject]@{
+            Dienst = @($alle | Select-Object Name,
+                        @{ n = 'StartType'; e = { [string]$_.StartType } },
+                        @{ n = 'Status';    e = { [string]$_.Status } })
+            AnzGes = @($alle).Count
+            AnzDis = @($alle | Where-Object { $_.StartType -eq 'Disabled'  }).Count
+            AnzMan = @($alle | Where-Object { $_.StartType -eq 'Manual'    }).Count
+            AnzAut = @($alle | Where-Object { $_.StartType -eq 'Automatic' }).Count
+            AnzRun = @($alle | Where-Object { $_.Status    -eq 'Running'   }).Count
+            AnzSto = @($alle | Where-Object { $_.Status    -eq 'Stopped'   }).Count
+            LokCon = @($wmi | Select-Object name, startmode)
+            LokAnz = @($wmi).Count
+        }
+    }
+    $dienst = $remote.Dienst
+    $anzges = $remote.AnzGes
+    $anzdis = $remote.AnzDis
+    $anzman = $remote.AnzMan
+    $anzaut = $remote.AnzAut
+    $anzrun = $remote.AnzRun
+    $anzsto = $remote.AnzSto
+    $lokcon = $remote.LokCon
+    $Lokanz = $remote.LokAnz
     Bereichstitel "Zu den Diensten:" "s"
     Leerzeile
     2werte "Anzahl der Dienste Gesamt:" $anzges "s"
