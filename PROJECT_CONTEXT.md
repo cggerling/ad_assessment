@@ -123,6 +123,19 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Zwei-Phasen-Struktur: Reconnaissance vs. Schwachstellen (Juni 2026, AD-Analyse-V5.ps1):**
+- Report ist jetzt klar in zwei Phasen gegliedert statt gemischt: **Phase 1 - Reconnaissance**
+  (reine Enumeration/Bestand: Domain/FSMO, Central Store, DCs, Trusts, DNS, SYSVOL-Health,
+  Admins, Benutzer, Computer, Clients/Server/Nicht-Windows, Gruppen, GPOs, OUs, MSA, CAs) und
+  **Phase 2 - Sicherheitslücken / Schwachstellen** (Passwort-Policies, Konten-Flags, Logging,
+  Kerberos, Privilegien/ACLs, AD CS/ESC, GPO/SYSVOL-Geheimnisse, DC-Basis + DC-Härtung vertieft);
+  **Delta** als Abschluss-Phase.
+- Hauptablauf entsprechend umsortiert (per AST blockweise, verifiziert). Neue Funktion `Phase`
+  (===-Banner im Text-Report, `Merken 'Phase'`). HTML: Phasen als `h2.phase`-Überschriften, die
+  **Executive Summary ist nach Phasen gruppiert** (Recon / Schwachstellen / Delta).
+- Tests **93 → 96** (Phasen-Reihenfolge statisch, `Phase`-Funktion, HTML-Phasen+Gruppierung),
+  grün PS 7 + 5.1.
+
 **Tests auf `AD-Analyse-V5.ps1` umgezogen (Juni 2026):**
 - Testdatei umbenannt `Tests/Analyse_V4_6.Format.Tests.ps1` -> `Tests/AD-Analyse-V5.Format.Tests.ps1`
   (`git mv`) und der Ziel-Pfad (`$skriptPfad`) auf `AD-Analyse-V5.ps1` umgestellt. Die Suite prüft
