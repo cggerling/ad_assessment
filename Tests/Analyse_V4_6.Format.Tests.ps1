@@ -939,6 +939,39 @@ Describe 'Analyse_V4_6.ps1' {
                 $_.Name -eq 'Vergleichsdatei:' -and "$($_.Wert)" -match 'nicht gefunden'
             }) | Should -Not -BeNullOrEmpty
         }
+
+        It 'keine CheckId wird von Pruefbereich UND Unterpruefung geteilt (kein doppelter Doku-Block)' {
+            # Regressionsschutz: teilen sich Bereich und Teilpruefung dieselbe CheckId, erscheint
+            # die Begruendung (Doku) doppelt - in Exec-Summary und Bericht (war beim Delta-Bereich so).
+            $cmds = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.CommandAst]
+            }, $true)
+            $bereichIds = @() ; $unterIds = @()
+            foreach ($c in $cmds) {
+                switch ($c.GetCommandName()) {
+                    'Pruefbereich' {
+                        for ($i = 0; $i -lt $c.CommandElements.Count - 1; $i++) {
+                            $el = $c.CommandElements[$i]
+                            if ($el -is [System.Management.Automation.Language.CommandParameterAst] -and
+                                $el.ParameterName -eq 'CheckId') {
+                                $v = $c.CommandElements[$i + 1]
+                                if ($v -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                                    $bereichIds += $v.Value
+                                }
+                            }
+                        }
+                    }
+                    'Unterpruefung' {
+                        $v = $c.CommandElements[2]   # Unterpruefung <titel> <checkid> <block>
+                        if ($v -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                            $unterIds += $v.Value
+                        }
+                    }
+                }
+            }
+            $geteilt = @($bereichIds | Where-Object { $unterIds -contains $_ })
+            $geteilt | Should -BeNullOrEmpty
+        }
     }
 
     Context 'Gepufferte Datei-Ausgabe (Puffer)' {

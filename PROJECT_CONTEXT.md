@@ -123,6 +123,18 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Bugfix „Delta-Bereich doppelter Doku-Block" (Juni 2026):**
+- Im Delta-Bereich teilten sich `Pruefbereich` und die einzelne `Unterpruefung` die CheckId
+  `'delta'`, wodurch Begründung (Doku), Exec-Summary-Eintrag und HTML-Anker `chk-delta`
+  **doppelt** erschienen (am DC-Report 18.06. aufgefallen). Fix: die Unterprüfung nutzt jetzt
+  CheckId `$null` (Doku kommt allein vom Bereich).
+- Neuer struktureller Regressionstest: **keine CheckId** darf gleichzeitig von einem
+  `Pruefbereich` und einer `Unterpruefung` verwendet werden (per AST geprüft). Suite **92 → 93**,
+  grün PS 7 + 5.1.
+- DC-Lauf 18.06. bestätigte Paket F (Delta 70/70, 0 neu/behoben) und den Umlaut-Feinschliff
+  (Text-Report UTF-8+BOM, kein Mojibake, Labels korrekt). `dcdienste`-Fix dort nicht ausgelöst
+  (Detailmodus `$DomCon=1`); zum Testen `-Bereiche @{ DomCon = 2 }`.
+
 **Umlaut-Feinschliff Teil 2 „Alt-Labels de-transliteriert" (Juni 2026):**
 - Die verbliebenen ~42 ASCII-transliterierten **Anzeige-Labels und Abschnittstitel** (z. B.
   „DC-Härtung (vertieft)", „Kerberos - Angriffsflächen", „GPP-Passwörter", „Veränderungen seit
