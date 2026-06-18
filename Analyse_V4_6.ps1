@@ -4964,7 +4964,9 @@ if ($DomCon -ge 1) {
 if ($deltchk -ge 1 -and $Vergleich) {
     Pruefbereich "Veränderungen seit letztem Lauf (Delta)" -CheckId 'delta' {
         Leerzeile
-        Unterpruefung "Vergleich mit früherem JSON-Export" 'delta' { chk_delta $Vergleich }
+        # CheckId $null: die Doku/Begruendung kommt bereits vom Pruefbereich 'delta' -
+        # so erscheint der Delta-Block nicht doppelt in Exec-Summary und Bericht.
+        Unterpruefung "Vergleich mit früherem JSON-Export" $null { chk_delta $Vergleich }
     }
 }
 ####################################################################################################
