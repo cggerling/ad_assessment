@@ -34,7 +34,7 @@ Describe 'AD-Analyse-V5.ps1' {
                             'Bereich','Phase','Bereichstitel','Subtitel','2werte','new_2werte',
                             'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                             'Ausgabe','Puffer_leeren','Entschluessle-GPP',
-                            'Merken','Doku','Farbklasse','HTML_Report','JSON_Export',
+                            'Merken','Doku','Schreibe-Fehler','Farbklasse','HTML_Report','JSON_Export',
                             'Extrahiere-Befunde','chk_delta')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
@@ -69,7 +69,9 @@ Describe 'AD-Analyse-V5.ps1' {
         $global:F_Ue_Schrift = 'Gray'
         $global:F_Text       = 'White'
         $global:F_Fehler     = 'Red'
-        $global:A_Con        = 0                    # keine Konsolenausgabe in den Tests
+        $global:A_Con        = 0                    # kein Voll-Report in der Konsole (Tests)
+        $global:A_Prog       = 0                    # keine Fortschrittsanzeige in den Tests
+        $global:Fehler_Anzahl = 0                   # Fehlerzaehler (Schreibe-Fehler)
         $global:A_Dat        = 1                    # Datei-Ausgabe in Temp-Datei
         $global:path         = Join-Path ([IO.Path]::GetTempPath()) 'ad_assessment_format_tests.txt'
         $global:A_Puffer     = New-Object System.Text.StringBuilder   # Ausgabepuffer wie im Skript
@@ -93,13 +95,13 @@ Describe 'AD-Analyse-V5.ps1' {
                          'Bereich','Phase','Bereichstitel','Subtitel','2werte','new_2werte',
                          'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                          'Ausgabe','Puffer_leeren','Entschluessle-GPP',
-                         'Merken','Doku','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen',
+                         'Merken','Doku','Schreibe-Fehler','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen',
                          'Extrahiere-Befunde','chk_delta')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
         foreach ($v in @('sb','zeichen','tabzeichen','tabtrenner','leer','type','maintitel',
                          'firma','madeby','datum','system','F_Rahmen','F_Ue_Schrift','F_Text',
-                         'F_Fehler','A_Con','A_Dat','path','A_Puffer','A_Htm','A_Jsn',
+                         'F_Fehler','A_Con','A_Prog','Fehler_Anzahl','A_Dat','path','A_Puffer','A_Htm','A_Jsn',
                          'R_Daten','version','CheckKatalog')) {
             Remove-Variable -Name $v -Scope Global -Force -ErrorAction SilentlyContinue
         }
@@ -415,14 +417,18 @@ Describe 'AD-Analyse-V5.ps1' {
             ($z -join ' ') | Should -Not -Match 'FEHLER'
         }
 
-        It 'faengt Fehler ab, vermerkt sie im Report und wirft nicht weiter' {
+        It 'faengt Fehler ab: kurzer Hinweis im Report, Details ins Fehlerlog, laeuft weiter' {
+            $logPfad = [System.IO.Path]::ChangeExtension($global:path, 'Fehler.log')
+            Remove-Item $logPfad -Force -ErrorAction SilentlyContinue
             { Pruefbereich 'Testbereich' { throw 'Absichtlicher Testfehler' } } | Should -Not -Throw
             $zeilen = Get-ReportZeilen
             $inhalt = $zeilen -join ' '
-            $inhalt | Should -Match 'FEHLER - Bereich nur unvollständig geprüft'   # Umlaute (UTF-8)
-            $inhalt | Should -Match 'Absichtlicher Testfehler'
-            $inhalt | Should -Match 'fortgesetzt'
+            $inhalt | Should -Match 'Bereich nicht vollständig geprüft'   # kurzer Hinweis (Umlaute)
+            $inhalt | Should -Match 'Fehlerlog'
+            $inhalt | Should -Not -Match 'Absichtlicher Testfehler'        # Detail nur im Log
             foreach ($zeile in $zeilen) { $zeile.Length | Should -Be 90 }
+            (Get-Content -LiteralPath $logPfad -Raw -Encoding UTF8) | Should -Match 'Absichtlicher Testfehler'
+            Remove-Item $logPfad -Force -ErrorAction SilentlyContinue
         }
 
         It 'nach einem Fehler laeuft die naechste Ausgabe normal weiter' {
@@ -727,11 +733,15 @@ Describe 'AD-Analyse-V5.ps1' {
         }
 
         It 'Unterpruefung faengt Fehler in der Teilpruefung ab (Bereich laeuft weiter)' {
+            $logPfad = [System.IO.Path]::ChangeExtension($global:path, 'Fehler.log')
+            Remove-Item $logPfad -Force -ErrorAction SilentlyContinue
             { Unterpruefung 'Testpruefung' 'kerberoasting' { throw 'Simulierter Abfragefehler' } } |
                 Should -Not -Throw
             $txt = (Get-ReportZeilen) -join ' '
-            $txt | Should -Match 'Teilprüfung übersprungen'        # Umlaute (UTF-8)
-            $txt | Should -Match 'Simulierter Abfragefehler'
+            $txt | Should -Match 'Teilprüfung übersprungen'        # kurzer Hinweis (Umlaute)
+            $txt | Should -Not -Match 'Simulierter Abfragefehler'  # Detail nur im Log
+            (Get-Content -LiteralPath $logPfad -Raw -Encoding UTF8) | Should -Match 'Simulierter Abfragefehler'
+            Remove-Item $logPfad -Force -ErrorAction SilentlyContinue
         }
     }
 
@@ -1022,6 +1032,28 @@ Describe 'AD-Analyse-V5.ps1' {
         }
     }
 
+    Context 'Konsole-Fortschritt und Fehlerlog' {
+
+        It 'Konsole zeigt standardmaessig nur Fortschritt (A_Con=0, A_Prog=1); -KeineKonsole schaltet beides ab' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Match '(?m)^\$A_Con = 0'
+            $inhalt | Should -Match '(?m)^\$A_Prog = 1'
+            $inhalt | Should -Match 'KeineKonsole\) \{ \$A_Con = 0 ; \$A_Prog = 0'
+        }
+
+        It 'Schreibe-Fehler protokolliert mit Zeitstempel ins separate Fehlerlog' {
+            $logPfad = [System.IO.Path]::ChangeExtension($global:path, 'Fehler.log')
+            Remove-Item $logPfad -Force -ErrorAction SilentlyContinue
+            Schreibe-Fehler 'Bereich: Test' 'etwas ist schiefgelaufen'
+            Test-Path $logPfad | Should -BeTrue
+            $log = Get-Content -LiteralPath $logPfad -Raw -Encoding UTF8
+            $log | Should -Match 'Fehlerprotokoll'
+            $log | Should -Match '\[Bereich: Test\] etwas ist schiefgelaufen'
+            $log | Should -Match '\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]'   # Zeitstempel
+            Remove-Item $logPfad -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     Context 'Gepufferte Datei-Ausgabe (Puffer)' {
 
         It 'Ausgaben landen erst mit Puffer_leeren in der Datei' {
@@ -1041,10 +1073,12 @@ Describe 'AD-Analyse-V5.ps1' {
         }
 
         It 'Pruefbereich schreibt den Puffer auch im Fehlerfall in die Datei' {
+            $logPfad = [System.IO.Path]::ChangeExtension($global:path, 'Fehler.log')
             Pruefbereich 'Testbereich' { throw 'Absichtlicher Testfehler' }
             # Direkt lesen, ohne Get-ReportZeilen (das wuerde selbst flushen):
-            $inhalt = @(Get-Content -LiteralPath $global:path) -join ' '
-            $inhalt | Should -Match 'Absichtlicher Testfehler'
+            $inhalt = @(Get-Content -LiteralPath $global:path -Encoding UTF8) -join ' '
+            $inhalt | Should -Match 'Fehlerlog'           # kurzer Hinweis steht im Report (Puffer geflusht)
+            Remove-Item $logPfad -Force -ErrorAction SilentlyContinue
         }
     }
 
