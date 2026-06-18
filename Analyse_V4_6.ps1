@@ -247,7 +247,9 @@ if ($A_Dat -eq 1) {                                 # Pruefung ab eine Ausgabe i
     if (!(Test-Path $sysverz)) {                    # Pruefung ob Verzeichnis vorhanden            #
         New-Item -Path $sysverz -ItemType Directory # Verzeichnis wird erstellt                    #
     }                                               #                                              #
-    Out-File $path -Encoding ascii -Width $SB       # Datei wird erstellt und Parameter gesetzt    #
+    # Leere Datei mit UTF-8-BOM anlegen, damit Umlaute korrekt sind                                #
+    # (PS 5.1 liest BOM-loses UTF-8 sonst als ANSI -> Umlaut-Salat):                                #
+    [System.IO.File]::WriteAllText($path, '', (New-Object System.Text.UTF8Encoding($true)))         #
 }                                                                                                  #
 ####################################################################################################
 # Gepufferte Datei-Ausgabe (Performance: ein Schreibvorgang je Bereich statt je Zeile)             #
@@ -257,7 +259,8 @@ function Ausgabe ([string]$zeile) {                                             
 }                                                                                                  #
 function Puffer_leeren {                                                                           #
     if ($A_Dat -eq 1 -and $A_Puffer.Length -gt 0) {                                                #
-        $A_Puffer.ToString() | Add-Content -Path $path -NoNewline                                  #
+        # UTF-8 anhaengen ohne weiteres BOM (das BOM steht bereits am Dateianfang):                 #
+        [System.IO.File]::AppendAllText($path, $A_Puffer.ToString(), (New-Object System.Text.UTF8Encoding($false))) #
         [void]$A_Puffer.Clear()                  # Puffer nach dem Schreiben leeren                #
     }                                                                                              #
 }                                                                                                  #
@@ -1366,13 +1369,10 @@ function neu_text ($sub,$uze,[string]$ueb,[string]$text) {
     # $ueb = Ueberschrift oder Titel                                                               #
     # $text = Der auszugebende Text                                                                #
     ### Berechnung #################################################################################
-    Merken 'Text' @{ Ueberschrift = $ueb; Text = $text }   # vor der Umlaut-Ersetzung erfasst
+    Merken 'Text' @{ Ueberschrift = $ueb; Text = $text }   # fuer HTML/JSON
     $anfang = "$zeichen " + (" " * $sub) ; $ende = " $zeichen" ; $Sammeln = @()
     $frei = $sb - $anfang.Length - $ende.Length
-    $ueb = $ueb -replace 'ü',"ue" -replace 'ä',"ae" -replace 'ö',"oe" `
-                -replace 'Ü',"Ue" -replace 'Ä',"Ae" -replace 'Ö',"Oe"
-    $text = $text -replace 'ü',"ue" -replace 'ä',"ae" -replace 'ö',"oe" `
-                  -replace 'Ü',"Ue" -replace 'Ä',"Ae" -replace 'Ö',"Oe"
+    # Umlaute bleiben erhalten (Text-Report ist jetzt UTF-8 mit BOM).
     if ($ueb) {
         $ueb_un = $uze * $ueb.Length
     }
