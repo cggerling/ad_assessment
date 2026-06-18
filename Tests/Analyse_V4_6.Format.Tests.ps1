@@ -157,6 +157,23 @@ Describe 'Analyse_V4_6.ps1' {
             $txt | Should -Match '\[int\]\$2012 - \[int\]\$2012r'
         }
 
+        It 'verwendet kein Enter-PSSession (laeuft non-interaktiv; Remote-Reads via Invoke-Command)' {
+            # Regressionsschutz: Enter-PSSession ist im Skript-Kontext wirkungslos und wuerde
+            # Remote-Pruefungen lokal laufen lassen. dcdienste sammelt jetzt via Invoke-Command.
+            $aufrufe = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.CommandAst]
+            }, $true) | ForEach-Object { $_.GetCommandName() }
+            $aufrufe | Should -Not -Contain 'Enter-PSSession'
+            $aufrufe | Should -Not -Contain 'Exit-PSSession'
+
+            $dcd = $ast.FindAll({
+                param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                          $a.Name -eq 'dcdienste'
+            }, $true) | Select-Object -First 1
+            $dcd | Should -Not -BeNullOrEmpty
+            $dcd.Extent.Text | Should -Match 'Invoke-Command -ComputerName \$dcho'
+        }
+
         It 'Hauptablauf nutzt Pruefbereich (kein ungeschuetzter Bereich-Aufruf auf Top-Level)' {
             $bereichAufrufe = $ast.FindAll({
                 param($a) $a -is [System.Management.Automation.Language.CommandAst]
