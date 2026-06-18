@@ -123,6 +123,14 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Neue Datei `AD-Analyse-V5.ps1` als Arbeitsbasis (Juni 2026):**
+- Byte-genaue Kopie des aktuellen `Analyse_V4_6.ps1` (UTF-8 mit BOM) unter neuem Namen; nur die
+  vier `.EXAMPLE`-Selbstaufrufe auf `.\AD-Analyse-V5.ps1` umgestellt. Soll künftig die Grundlage
+  für weitere Anpassungen sein. `Analyse_V4_6.ps1` bleibt vorerst bestehen.
+- **Offen/zu entscheiden:** Die Pester-Tests (`Tests/Analyse_V4_6.Format.Tests.ps1`) zeigen weiter
+  auf die alte Datei. Für Weiterentwicklung an `AD-Analyse-V5.ps1` sollten die Tests darauf
+  umgezogen (oder dupliziert) und die alte Datei ggf. später entfernt werden.
+
 **Inhalt „Texte etwas weniger technisch" (Juni 2026):**
 - Auf Wunsch (Management/Audit-Lesbarkeit) die Begründungstexte (Zweck/Hintergrund) aller ~45
   Katalogeinträge entschärft: mit der Wirkung beginnen, tiefe Identifier entfernt (GUIDs, Hex-UAC-
