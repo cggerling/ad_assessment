@@ -123,6 +123,16 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Inhalt „Texte etwas weniger technisch" (Juni 2026):**
+- Auf Wunsch (Management/Audit-Lesbarkeit) die Begründungstexte (Zweck/Hintergrund) aller ~45
+  Katalogeinträge entschärft: mit der Wirkung beginnen, tiefe Identifier entfernt (GUIDs, Hex-UAC-
+  Flags, OIDs, Hashcat-Modi, API-/Interna-Namen wie MS-DRSR/SDProp/kdssvc, Event-IDs, EDITF/
+  msPKI-Flags, CVE-Nummern in der Prosa), kürzer gefasst. Erkennbare Anker (DCSync, AdminSDHolder,
+  Kerberoasting, Golden Ticket, ESC1-8, PrinterBug) bleiben. **Titel/Schwere/Beispiele/Quellen
+  unverändert.**
+- Tonalität vorab an dcsync/adminsdholder kalibriert und freigegeben; per verifizierter Voll-
+  Fragment-Ersetzung ausgerollt (Restjargon-Scan: 0 in Zweck/Hintergrund). 93 Tests grün PS 7 + 5.1.
+
 **Bugfix „Delta-Bereich doppelter Doku-Block" (Juni 2026):**
 - Im Delta-Bereich teilten sich `Pruefbereich` und die einzelne `Unterpruefung` die CheckId
   `'delta'`, wodurch Begründung (Doku), Exec-Summary-Eintrag und HTML-Anker `chk-delta`

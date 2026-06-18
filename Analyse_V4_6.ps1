@@ -286,7 +286,7 @@ $CheckKatalog = @{
         Zweck = 'Erfasst Grunddaten von Domäne und Forest: Funktionsebenen, FSMO-Rollenverteilung, AD-Papierkorb und das Alter des krbtgt-Kontos. Diese Werte bilden die Basis für alle weiteren Bewertungen.'
         Beispiel = 'Eine niedrige Funktionsebene (z. B. Windows Server 2008) verhindert moderne Sicherheitsfunktionen wie AD-Papierkorb oder gMSA. Ein sehr altes krbtgt-Passwort erleichtert Golden-Ticket-Angriffe.'
         Empfehlung = 'Funktionsebenen auf den höchsten von allen DCs unterstützten Stand heben; AD-Papierkorb aktivieren; krbtgt-Passwort regelmäßig (zweifach im Abstand) zurücksetzen.'
-        Hintergrund = 'Funktionsebenen (Domain/Forest Functional Level) legen fest, welche AD-Features und welche DC-Betriebssysteme möglich sind. FSMO-Rollen sind fünf Sonderaufgaben (u. a. PDC-Emulator, RID-, Schema-Master), die je nur ein DC innehat. Das krbtgt-Konto hält den Schlüssel, mit dem alle Kerberos-TGTs signiert werden - wer dessen Hash kennt, kann beliebige "Golden Tickets" ausstellen; daher ist das Passwortalter relevant. Der AD-Papierkorb (ab Funktionsebene 2008 R2) erlaubt das Wiederherstellen gelöschter Objekte.'
+        Hintergrund = 'Die Funktionsebene bestimmt, welche AD-Sicherheitsfunktionen überhaupt nutzbar sind. Das krbtgt-Konto ist der zentrale Generalschlüssel der Domäne: Wer es erbeutet, kann sich dauerhaft beliebige Identitäten ausstellen ("Golden Ticket") - ein altes krbtgt-Passwort erhöht dieses Risiko. Der AD-Papierkorb erlaubt es, versehentlich gelöschte Objekte wiederherzustellen.'
         Quellen = @(
             @{ Titel = 'Microsoft Learn - Active Directory Domain Services Functional Levels'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/active-directory-functional-levels' }
             @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
@@ -318,7 +318,7 @@ $CheckKatalog = @{
         Zweck = 'Prüft Status des Eventlog-Dienstes und die Audit-Richtlinien der DCs. Ohne aktiviertes Auditing fehlen die Spuren, mit denen Angriffe überhaupt erkannt werden können.'
         Beispiel = 'Ist "Audit Kerberos Service Ticket Operations" deaktiviert, bleibt Kerberoasting unsichtbar. Ohne Anmelde-Auditing lassen sich Brute-Force-/Spraying-Angriffe nicht nachweisen.'
         Empfehlung = 'Advanced Audit Policy gemäß Microsoft-/CIS-Empfehlung konfigurieren (Anmeldungen, Kontenverwaltung, Verzeichnisdienstzugriff); Logs zentral in ein SIEM sammeln.'
-        Hintergrund = 'Windows kennt klassische und "Advanced Audit Policy"-Kategorien. Auf DCs sind besonders relevant: Account Logon (Kerberos-/Credential-Validierung), Account Management (Gruppen-/Kontoänderungen) und DS Access (Verzeichnisdienstzugriff/-änderungen). Microsofts Baseline empfiehlt u. a. "Audit Kerberos Service Ticket Operations" und Directory-Service-Access auf DCs - ohne diese fehlen die Events (z. B. 4769, 4624, 4672, 4964), auf die SIEM-Erkennung aufsetzt.'
+        Hintergrund = 'Ohne aktiviertes Auditing auf den Domänencontrollern entstehen keine Protokolle - Angriffe wie Kerberoasting oder Passwort-Spraying bleiben dann unsichtbar und im Nachhinein nicht nachweisbar. Microsoft empfiehlt, Anmeldungen, Konten-/Gruppenänderungen und Verzeichniszugriffe gezielt zu protokollieren und die Ereignisse zentral (SIEM) zu sammeln, damit Auffälligkeiten erkannt werden.'
         Quellen = @(
             @{ Titel = 'Microsoft Learn - System Audit Policy recommendations'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/audit-policy-recommendations' }
         )
@@ -328,7 +328,7 @@ $CheckKatalog = @{
         Zweck = 'Wertet Vertrauensstellungen zu anderen Domänen/Forests aus: Richtung, Transitivität und SID-Filtering. Trusts sind potenzielle Angriffspfade über Domänengrenzen hinweg.'
         Beispiel = 'Fehlt bei einem Forest-Trust das SID-Filtering, kann ein Angreifer aus der vertrauten Domäne per SID-History Rechte in der eigenen Domäne erlangen (cross-forest privilege escalation).'
         Empfehlung = 'Nicht mehr benötigte Trusts entfernen; SID-Filtering/Quarantine für externe Trusts aktiviert lassen; selektive Authentifizierung prüfen.'
-        Hintergrund = 'Eine Vertrauensstellung erlaubt Konten einer Domäne, sich in einer anderen zu authentifizieren. Richtung (ein-/zweiseitig) und Transitivität bestimmen die Reichweite. SID-Filtering (Quarantine) verhindert, dass aus einer vertrauten Domäne gefälschte SID-History-Einträge privilegierte SIDs der eigenen Domäne einschleusen - fehlt es bei einem externen/Forest-Trust, ist eine domänenübergreifende Rechteausweitung möglich.'
+        Hintergrund = 'Eine Vertrauensstellung erlaubt Konten einer fremden Domäne, sich in der eigenen anzumelden - und ist damit ein möglicher Angriffsweg über Domänengrenzen hinweg. Eine Schutzfunktion (SID-Filtering) verhindert, dass aus der vertrauten Domäne unrechtmäßig erhöhte Rechte eingeschleust werden. Fehlt dieser Schutz bei einem externen Trust, kann ein Angreifer von dort Rechte in der eigenen Domäne erlangen.'
         Quellen = @(
             @{ Titel = 'MITRE ATT&CK T1482 - Domain Trust Discovery'; Url = 'https://attack.mitre.org/techniques/T1482/' }
             @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
@@ -356,10 +356,10 @@ $CheckKatalog = @{
     }
     'admins' = @{
         Titel = 'Administratoren und Builtin Benutzer'; Schwere = 'Hoch'
-        Zweck = 'Wertet hochprivilegierte Gruppen aus (Domain/Enterprise/Schema Admins, Administratoren, Builtin-Konten, Konten mit AdminCount=1). Diese Konten sind das primäre Ziel jedes Angreifers.'
+        Zweck = 'Wertet hochprivilegierte Gruppen aus (Domänen-, Organisations- und Schema-Admins, Administratoren, Builtin-Konten und weitere als privilegiert markierte Konten). Diese Konten sind das primäre Ziel jedes Angreifers.'
         Beispiel = 'Ein vergessenes Dienstkonto in "Domain Admins" mit schwachem Passwort genügt, um die gesamte Domäne zu übernehmen. Je mehr Mitglieder, desto größer die Angriffsfläche.'
         Empfehlung = 'Mitgliederzahl privilegierter Gruppen minimieren (Tier-0-Modell); Enterprise/Schema Admins im Normalbetrieb leer halten; dedizierte Admin-Konten, kein Tagesgeschäft mit Admin-Rechten.'
-        Hintergrund = 'Bestimmte Gruppen (Enterprise/Schema/Domain Admins, Administrators, Account/Backup/Server/Print Operators u. a.) sind "protected": Der SDProp-Prozess gleicht ihre ACL alle 60 Minuten gegen das AdminSDHolder-Objekt ab und setzt Abweichungen zurück; Konten dieser Gruppen tragen AdminCount=1 und erben keine Vererbung. Diese Konten sind das primäre Ziel für Credential-Theft - ihre Anzahl sollte minimal sein (Tier-0-Modell).'
+        Hintergrund = 'Die höchstprivilegierten Gruppen (u. a. Domänen-, Organisations- und Schema-Admins, Administratoren, die Operatoren-Gruppen) verfügen über die mächtigsten Rechte der Domäne und sind das bevorzugte Ziel von Angreifern. Je mehr Mitglieder sie haben, desto größer die Angriffsfläche. Best Practice ist, diese Gruppen so klein wie möglich zu halten und privilegierte Konten strikt von der täglichen Arbeit zu trennen.'
         Quellen = @(
             @{ Titel = 'Microsoft Learn - Appendix C: Protected Accounts and Groups in Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory' }
             @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
@@ -421,7 +421,7 @@ $CheckKatalog = @{
         Zweck = 'Wertet AD-Gruppen aus (Anzahl, Typ, leere oder verschachtelte Gruppen). Unübersichtliche Gruppenstrukturen führen zu schleichender Rechteanhäufung.'
         Beispiel = 'Tief verschachtelte Gruppen verschleiern, wer am Ende welche Rechte hat - so entstehen ungewollte Berechtigungen.'
         Empfehlung = 'Gruppenmodell aufräumen (z. B. AGDLP), leere/verwaiste Gruppen entfernen, Verschachtelung begrenzen, regelmäßig rezertifizieren.'
-        Hintergrund = 'AD kennt Gruppen-Geltungsbereiche (lokal in Domäne, global, universal) und erlaubt Verschachtelung. Tiefe Verschachtelung verschleiert die effektiven Rechte ("wer ist letztlich Mitglied?") und führt zu schleichender Rechteanhäufung. Das AGDLP-Prinzip (Accounts -> Global -> Domain Local -> Permission) hält die Berechtigungsvergabe nachvollziehbar.'
+        Hintergrund = 'Gruppen lassen sich ineinander verschachteln. Tiefe oder unübersichtliche Verschachtelung verschleiert, wer am Ende welche Rechte besitzt, und führt dazu, dass Konten unbemerkt immer mehr Berechtigungen ansammeln. Ein klares, flaches Gruppenmodell und regelmäßiges Aufräumen halten die Rechtevergabe nachvollziehbar.'
         Quellen = @(
             @{ Titel = 'Microsoft Learn - Active Directory Security Groups (scope and nesting)'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-groups' }
         )
@@ -462,7 +462,7 @@ $CheckKatalog = @{
         Zweck = 'Gleicht Benutzerkonten gegen passwortbezogene Risikomerkmale ab, u. a. "Passwort läuft nie ab" und "Passwort nicht erforderlich". Solche Konten unterlaufen die Passwortrichtlinie.'
         Beispiel = 'Ein Konto mit "Password never expires" und schwachem Passwort bleibt dauerhaft angreifbar; "Password not required" erlaubt im Extremfall ein leeres Passwort.'
         Empfehlung = 'Flags PASSWD_NOTREQD und DONT_EXPIRE_PASSWORD prüfen und entfernen (Ausnahmen nur für gMSA/begründete Fälle).'
-        Hintergrund = 'Im Attribut userAccountControl stecken Risiko-Flags: DONT_EXPIRE_PASSWORD (0x10000) - das Passwort läuft nie ab; PASSWD_NOTREQD (0x20) - kein Passwort erforderlich (im Extremfall leer). Solche Konten unterlaufen die Passwortrichtlinie und bleiben dauerhaft angreifbar. Ausnahmen sind nur für (g)MSA bzw. begründete technische Fälle vertretbar.'
+        Hintergrund = 'Einzelne Konten können so eingestellt sein, dass ihr Passwort nie abläuft oder gar keines erforderlich ist (im Extremfall ein leeres Passwort). Solche Konten unterlaufen die Passwortrichtlinie und bleiben dauerhaft ein leichtes Ziel. Vertretbar ist das nur für automatisch verwaltete Dienstkonten (gMSA) oder begründete technische Ausnahmen.'
         Quellen = @(
             @{ Titel = 'Microsoft Learn - UserAccountControl property flags'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/useraccountcontrol-manipulate-account-properties' }
             @{ Titel = 'Microsoft Learn - Best practices for securing Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory' }
@@ -483,7 +483,7 @@ $CheckKatalog = @{
         Zweck = 'Prüft (group) Managed Service Accounts und den KDS-Root-Key. (g)MSA bieten automatisch verwaltete, sehr lange Passwörter und sind die sichere Alternative zu klassischen Dienstkonten.'
         Beispiel = 'Laufen Dienste noch unter klassischen Konten mit fixem Passwort und SPN, sind sie Kerberoasting-fähig - ein gMSA wäre dagegen praktisch nicht knackbar.'
         Empfehlung = 'Dienste auf gMSA umstellen; KDS-Root-Key bereitstellen; klassische Dienstkonten ablösen.'
-        Hintergrund = 'Ein gMSA ist ein automatisch verwaltetes Domänenkonto: Der Schlüssel wird vom Microsoft Key Distribution Service (KDS, kdssvc.dll) aus einem KDS-Root-Key abgeleitet, das Passwort (sehr lang, regelmäßig rotiert) verwalten die DCs selbst; Member-Server holen es bei Bedarf ab. Damit entfällt die manuelle Passwortpflege, und Kerberoasting wird praktisch wirkungslos. Voraussetzung ist ein bereitgestellter KDS-Root-Key.'
+        Hintergrund = 'Ein gMSA ist ein Dienstkonto, dessen sehr langes Passwort von den Domänencontrollern automatisch erzeugt und regelmäßig gewechselt wird - niemand muss es kennen oder pflegen. Dadurch sind solche Konten praktisch nicht angreifbar (kein Kerberoasting) und die sichere Alternative zu klassischen Dienstkonten mit festem Passwort.'
         Quellen = @(
             @{ Titel = 'Microsoft Learn - Group Managed Service Accounts overview'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/group-managed-service-accounts/group-managed-service-accounts/group-managed-service-accounts-overview' }
         )
@@ -493,7 +493,7 @@ $CheckKatalog = @{
         Zweck = 'Erfasst die Zertifizierungsstellen (Root/Sub-CA) der Umgebung (AD CS). Die PKI ist sicherheitskritisch: Wer Zertifikate ausstellen kann, kann sich als beliebiger Benutzer ausgeben.'
         Beispiel = 'Eine falsch konfigurierte Vorlage kann es jedem Benutzer erlauben, ein Anmeldezertifikat für einen Administrator zu beantragen (ESC1) - die Detailprüfung erfolgt im AD-CS-Sicherheitscheck.'
         Empfehlung = 'CA-Rollen und Vorlagen regelmäßig auf Fehlkonfigurationen prüfen (ESC1-ESC8); Ausstellungsrechte streng begrenzen.'
-        Hintergrund = 'AD Certificate Services (AD CS) stellt Zertifikate aus, u. a. für die Anmeldung (Client Authentication). Ist eine Vorlage falsch konfiguriert - etwa der Antragsteller liefert den Subject selbst (ENROLLEE_SUPPLIES_SUBJECT) plus Client-Authentication plus breite Enroll-Rechte -, kann ein normaler Benutzer ein Zertifikat auf einen Administrator ausstellen und sich damit anmelden. SpecterOps fasst diese Eskalationsklassen als ESC1-ESC8 zusammen; die Detailprüfung der Vorlagen ist für ein eigenes AD-CS-Paket vorgesehen.'
+        Hintergrund = 'Die hauseigene Zertifikatsstelle (AD CS) stellt u. a. Zertifikate aus, mit denen man sich anmelden kann. Ist eine Zertifikatvorlage falsch konfiguriert, kann ein normaler Benutzer sich darüber ein Zertifikat auf einen Administrator ausstellen und dessen Identität übernehmen. Diese Schwachstellen sind als ESC1-ESC8 bekannt; sie werden im AD-CS-Sicherheitscheck im Detail geprüft.'
         Quellen = @(
             @{ Titel = 'SpecterOps (Schroeder/Christensen) - Certified Pre-Owned: Abusing AD CS'; Url = 'https://specterops.io/blog/2021/06/17/certified-pre-owned/' }
         )
@@ -503,7 +503,7 @@ $CheckKatalog = @{
         Zweck = 'Führt pro Domänencontroller Detailprüfungen durch (Dienste, Rollen, Features, LDAPS, NTLM, SMB1, BitLocker, ExecutionPolicy). Der DC ist das Herz der Domäne; seine Härtung ist entscheidend.'
         Beispiel = 'Ist SMB1 auf einem DC noch aktiv, ist er über längst bekannte Lücken (z. B. EternalBlue) angreifbar; fehlendes LDAPS erlaubt das Mitlesen von Verzeichnisanfragen.'
         Empfehlung = 'SMB1 entfernen, LDAPS/LDAP-Signing erzwingen, NTLM einschränken, DCs nach CIS-/Microsoft-Baseline härten.'
-        Hintergrund = 'Die DC-Detailprüfung betrachtet je DC Dienste, Rollen, Features und Härtungsindikatoren: SMB1 (veraltet, EternalBlue-Angriffsfläche), LDAPS/LDAP-Signing (Schutz gegen Mitlesen und NTLM-Relay), NTLM-Stufe (lmcompatibilitylevel), BitLocker und PowerShell-ExecutionPolicy. Microsofts Security Baselines (Security Compliance Toolkit) und CIS-Benchmarks liefern dafür geprüfte Soll-Werte als GPO-Pakete.'
+        Hintergrund = 'Die Detailprüfung betrachtet je Domänencontroller Dienste, Rollen, Features und mehrere Härtungsindikatoren: das veraltete, angreifbare SMB1, den Schutz der Verzeichnis-Anmeldung (LDAPS/LDAP-Signing), die NTLM-Stufe, BitLocker und die PowerShell-Ausführungsrichtlinie. Microsofts Security Baselines und CIS-Benchmarks liefern dafür geprüfte Soll-Werte.'
         Quellen = @(
             @{ Titel = 'Microsoft Learn - Windows security baselines guide'; Url = 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/device-management/windows-security-configuration-framework/windows-security-baselines' }
             @{ Titel = 'Microsoft Learn - Microsoft Security Compliance Toolkit'; Url = 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/device-management/windows-security-configuration-framework/security-compliance-toolkit-10' }
@@ -512,7 +512,7 @@ $CheckKatalog = @{
     'kerberos' = @{
         Titel = 'Kerberos - Angriffsflächen'; Schwere = 'Hoch'
         Zweck = 'Bündelt die wichtigsten Kerberos-bezogenen Angriffsflächen einer AD-Umgebung: angreifbare Dienstkonten (SPN), Konten ohne Vorauthentifizierung, missbrauchbare Delegation, schwache Verschlüsselung und das Computerkonten-Kontingent.'
-        Hintergrund = 'Kerberos ist das Standard-Authentifizierungsprotokoll in AD. Ein Client erhält vom KDC (Domain Controller) ein Ticket-Granting Ticket (TGT) und damit Service-Tickets (TGS) für einzelne Dienste. Mehrere Konto-Eigenschaften bestimmen, wie angreifbar diese Tickets sind: der servicePrincipalName, userAccountControl-Flags (z. B. DONT_REQ_PREAUTH 0x400000, TRUSTED_FOR_DELEGATION 0x80000, USE_DES_KEY_ONLY 0x200000), die Delegations-Attribute und msDS-SupportedEncryptionTypes. Die folgenden Teilprüfungen lesen genau diese Attribute read-only per LDAP aus.'
+        Hintergrund = 'Kerberos ist das zentrale Anmeldeverfahren in Active Directory: Nutzer erhalten vom Domänencontroller Tickets, mit denen sie sich an Diensten anmelden. Bestimmte Konto-Einstellungen (z. B. hinterlegte Dienstnamen, fehlende Vorauthentifizierung, Delegationsrechte oder veraltete Verschlüsselung) machen diese Tickets angreifbar - oft so, dass ein normaler Benutzer ohne Adminrechte an privilegierte Anmeldedaten gelangt. Die folgenden Teilprüfungen lesen genau diese Einstellungen read-only aus.'
         Beispiel = 'Diese Schwachstellen erlauben es einem normalen Domänenbenutzer häufig, ohne Adminrechte an privilegierte Anmeldedaten zu gelangen - ein klassischer Einstieg in die Domänenübernahme.'
         Empfehlung = 'Die einzelnen Teilprüfungen abarbeiten; Dienstkonten auf gMSA umstellen, AES erzwingen, Delegation minimieren und das Kontingent auf 0 setzen.'
         Quellen = @(
@@ -522,8 +522,8 @@ $CheckKatalog = @{
     }
     'kerberoasting' = @{
         Titel = 'Kerberoasting (Konten mit SPN)'; Schwere = 'Hoch'
-        Zweck = 'Listet aktivierte Benutzerkonten (keine Computer) mit gesetztem servicePrincipalName (SPN) auf, krbtgt ausgenommen. Privilegierte Treffer (AdminCount=1) werden zusätzlich markiert.'
-        Hintergrund = 'Bei Kerberoasting fordert ein beliebiger authentifizierter Benutzer beim KDC ein Service-Ticket (TGS-REQ) für ein SPN-Konto an. Der verschlüsselte Teil des Tickets ist mit einem vom Kontopasswort abgeleiteten Schlüssel kodiert - meist RC4-HMAC, also dem NTLM-Hash des Dienstkontos. Das Ticket lässt sich exportieren und vollständig offline knacken (z. B. Hashcat-Modus 13100), ohne weitere DC-Interaktion und damit weitgehend unauffällig. Schwache Dienstkonto-Passwörter fallen so in Minuten bis Stunden.'
+        Zweck = 'Listet aktivierte Benutzerkonten (keine Computer) mit gesetztem servicePrincipalName (SPN) auf, krbtgt ausgenommen. Treffer, die zu privilegierten Konten gehören, werden zusätzlich hervorgehoben.'
+        Hintergrund = 'Bei Kerberoasting fordert ein beliebiger angemeldeter Benutzer beim Domänencontroller ein Ticket für ein Dienstkonto an. Ein Teil dieses Tickets ist mit dem Passwort des Dienstkontos verschlüsselt und lässt sich in Ruhe offline knacken - ohne weitere Spuren am Domänencontroller. Schwache Dienstkonto-Passwörter fallen so in Minuten bis Stunden; besonders kritisch, wenn das Konto privilegiert ist.'
         Beispiel = 'Jeder Domänenbenutzer fordert für ein SPN-Konto wie "svc-sql" ein Ticket an und knackt es offline. Steckt das Konto in "Domain Admins", ist die Domäne kompromittiert.'
         Empfehlung = 'Dienstkonten auf (group) Managed Service Accounts umstellen (automatische 120-Zeichen-Passwörter); sonst Passwörter >= 25 Zeichen; msDS-SupportedEncryptionTypes der Konten auf AES beschränken (entzieht RC4-Tickets die Grundlage); privilegierte Konten nie mit SPN betreiben.'
         Quellen = @(
@@ -534,8 +534,8 @@ $CheckKatalog = @{
     }
     'asrep' = @{
         Titel = 'AS-REP Roasting (ohne Vorauthentifizierung)'; Schwere = 'Hoch'
-        Zweck = 'Findet aktivierte Konten mit gesetztem Flag DONT_REQ_PREAUTH (0x400000) - Kerberos-Vorauthentifizierung nicht erforderlich.'
-        Hintergrund = 'Normalerweise muss ein Client im ersten Schritt (AS-REQ) seine Identität durch einen mit dem Benutzerpasswort verschlüsselten Zeitstempel beweisen (Pre-Authentication). Ist DONT_REQ_PREAUTH gesetzt, entfällt dieser Schutz: Ein Angreifer sendet eine AS-REQ für das Konto und erhält eine AS-REP, deren verschlüsselter Teil (oft RC4) vom Benutzerpasswort abgeleitet ist - und damit offline knackbar (Hashcat-Modus 18200). Es ist keinerlei gültige Anmeldung nötig.'
+        Zweck = 'Findet aktivierte Konten, bei denen die Kerberos-Vorauthentifizierung abgeschaltet ist ("Pre-Authentication nicht erforderlich").'
+        Hintergrund = 'Normalerweise muss ein Konto bei der Anmeldung zuerst sein Passwort nachweisen (Vorauthentifizierung). Ist diese abgeschaltet, kann ein Angreifer für das Konto ohne jede eigene Anmeldung eine Antwort vom Domänencontroller anfordern, deren verschlüsselter Teil vom Benutzerpasswort abhängt - und ihn anschließend offline knacken. Schwache Passwörter solcher Konten sind damit leicht angreifbar.'
         Beispiel = 'Ein Angreifer mit reiner Netzwerksicht zählt Konten ohne Pre-Auth auf, holt deren AS-REP und knackt schwache Passwörter offline.'
         Empfehlung = 'Flag "Kerberos-Preauthentifizierung nicht erforderlich" entfernen, wo immer möglich; verbleibende Konten mit langen, starken Passwörtern versehen oder deaktivieren.'
         Quellen = @(
@@ -545,8 +545,8 @@ $CheckKatalog = @{
     }
     'delegation' = @{
         Titel = 'Delegation (Unconstrained / Constrained / RBCD)'; Schwere = 'Hoch'
-        Zweck = 'Prüft Konten/Computer mit Kerberos-Delegationsrechten: uneingeschränkt (TRUSTED_FOR_DELEGATION 0x80000), eingeschränkt (msDS-AllowedToDelegateTo) und ressourcenbasiert (msDS-AllowedToActOnBehalfOfOtherIdentity). Domänencontroller werden ausgenommen.'
-        Hintergrund = 'Delegation erlaubt einem Dienst, im Namen eines Benutzers auf weitere Dienste zuzugreifen. Bei UNCONSTRAINED Delegation speichert der Server das weiterleitbare TGT jedes ankommenden Benutzers im Speicher - wird der Server kompromittiert, lassen sich diese TGTs (inkl. Domain Admins) abgreifen. CONSTRAINED Delegation (S4U2Proxy) beschränkt die Zieldienste, ist aber bei aktiviertem Protocol Transition (S4U2Self) ebenfalls missbrauchbar. RESOURCE-BASED Constrained Delegation (RBCD) wird am Zielobjekt gesetzt und ist ein verbreiteter Eskalationspfad, oft kombiniert mit dem Anlegen eines Computerkontos (siehe MachineAccountQuota).'
+        Zweck = 'Prüft Konten und Computer mit Kerberos-Delegationsrechten in den drei Varianten uneingeschränkt, eingeschränkt und ressourcenbasiert (RBCD). Domänencontroller werden ausgenommen.'
+        Hintergrund = 'Delegation erlaubt einem Dienst, im Namen eines Benutzers auf weitere Dienste zuzugreifen. Bei der uneingeschränkten Variante hält der Server die Anmeldeinformationen jedes ankommenden Benutzers vor - wird er kompromittiert, lassen sich darüber auch Anmeldedaten von Administratoren abgreifen und die Domäne übernehmen. Die eingeschränkten Varianten sind sicherer, bei Fehlkonfiguration aber ebenfalls ein verbreiteter Weg zur Rechteausweitung (häufig kombiniert mit selbst angelegten Computerkonten).'
         Beispiel = 'Ein Computer mit uneingeschränkter Delegation, der von einem Domänenadministrator kontaktiert wird, hält dessen TGT vor - der Angreifer extrahiert es und übernimmt die Domäne. RBCD-Einträge erlauben oft eine direkte Übernahme des Zielsystems.'
         Empfehlung = 'Uneingeschränkte Delegation vermeiden; auf eingeschränkte Delegation ohne Protocol Transition umstellen; sensible Konten als "Konto ist vertraulich und kann nicht delegiert werden" (NOT_DELEGATED) markieren bzw. in "Protected Users" aufnehmen; RBCD-Einträge regelmäßig prüfen.'
         Quellen = @(
@@ -557,8 +557,8 @@ $CheckKatalog = @{
     }
     'kerb_enc' = @{
         Titel = 'Schwache Kerberos-Verschlüsselung'; Schwere = 'Mittel'
-        Zweck = 'Findet Konten, die ausschließlich DES verwenden (UAC-Flag USE_DES_KEY_ONLY 0x200000).'
-        Hintergrund = 'Kerberos-Tickets können mit DES, RC4 oder AES verschlüsselt sein. DES (56-Bit) gilt seit Jahren als gebrochen; RC4-HMAC ist veraltet und erleichtert Offline-Angriffe wie Kerberoasting. Ab Windows 7 / Server 2008 R2 ist DES standardmäßig deaktiviert; Konten mit erzwungenem DES (USE_DES_KEY_ONLY) sind ein klares Risiko. Robust ist AES128/AES256, gesteuert über msDS-SupportedEncryptionTypes je Konto bzw. die GPO-Richtlinie.'
+        Zweck = 'Findet Konten, die auf die veraltete DES-Verschlüsselung festgelegt sind.'
+        Hintergrund = 'Kerberos-Tickets können unterschiedlich stark verschlüsselt sein. DES und RC4 gelten als veraltet bzw. gebrochen und erleichtern Angriffe wie das Offline-Knacken von Tickets. Konten, die noch fest auf DES eingestellt sind, geben besonders schwach geschützte Tickets aus. Sicher ist die AES-Verschlüsselung, die sich pro Konto oder per Gruppenrichtlinie erzwingen lässt.'
         Beispiel = 'Ein Dienstkonto mit erzwungenem DES gibt schwach verschlüsselte Tickets aus, die sich mit heutiger Hardware extrem schnell brechen lassen.'
         Empfehlung = 'USE_DES_KEY_ONLY entfernen; msDS-SupportedEncryptionTypes der Konten auf AES (Wert 0x18 = AES128 + AES256) setzen und RC4 schrittweise per GPO "Configure encryption types allowed for Kerberos" abschalten.'
         Quellen = @(
@@ -568,8 +568,8 @@ $CheckKatalog = @{
     }
     'machine_quota' = @{
         Titel = 'Computerkonten-Kontingent (MachineAccountQuota)'; Schwere = 'Hoch'
-        Zweck = 'Liest am Domänenobjekt das Attribut ms-DS-MachineAccountQuota - die Anzahl Computerkonten, die ein nicht-privilegierter Benutzer selbst in die Domäne aufnehmen darf. Standard ist 10.'
-        Hintergrund = 'Das Attribut steht am Domänen-(Sam-Domain-)Objekt und gilt für alle authentifizierten Benutzer. Bei Wert > 0 kann jeder Benutzer eigene Computerkonten anlegen (inkl. SPN). Das ist Baustein mehrerer Angriffsketten: Resource-Based Constrained Delegation (das selbst angelegte Konto wird als delegationsberechtigt am Ziel eingetragen) sowie die noPac-Lücke (CVE-2021-42278/42287), bei der ein angelegtes Computerkonto so umbenannt wird, dass es sich als Domänencontroller ausgeben kann.'
+        Zweck = 'Liest aus, wie viele Computerkonten ein normaler Benutzer selbst in die Domäne aufnehmen darf (Einstellung ms-DS-MachineAccountQuota). Standard ist 10.'
+        Hintergrund = 'Standardmäßig darf jeder Benutzer bis zu 10 eigene Computerkonten anlegen. Solche selbst angelegten Konten sind Baustein mehrerer bekannter Angriffe, mit denen sich Rechte bis zur Übernahme eines Servers oder sogar eines Domänencontrollers ausweiten lassen (u. a. die "noPac"-Lücke von 2021). In den meisten Umgebungen wird diese Möglichkeit nicht benötigt.'
         Beispiel = 'Ein Standardbenutzer legt ein Computerkonto an, trägt es als RBCD-Prinzipal an einem Zielserver ein und übernimmt diesen - ohne jegliche Adminrechte.'
         Empfehlung = 'ms-DS-MachineAccountQuota auf 0 setzen und das Anlegen von Computerkonten an eine dedizierte, delegierte Gruppe binden. noPac-Patches (November 2021) einspielen.'
         Quellen = @(
@@ -581,7 +581,7 @@ $CheckKatalog = @{
     'privilegien' = @{
         Titel = 'Privilegien & ACLs'; Schwere = 'Hoch'
         Zweck = 'Bündelt Prüfungen rund um privilegierte Rechte und gefährliche Berechtigungen im Verzeichnis: DCSync-Rechte, riskante Operatoren-/Admin-Gruppen, die AdminSDHolder-ACL, die Nutzung von Protected Users und die Pre-Windows-2000-Kompatibilität.'
-        Hintergrund = 'Über die reine Gruppenmitgliedschaft hinaus entscheiden Verzeichnis-ACLs, wer privilegierte Operationen ausführen darf. Schon einzelne delegierte Rechte (z. B. Verzeichnis-Replikation oder Schreibrechte auf AdminSDHolder) können einer nicht-privilegierten Identität die vollständige Domänenübernahme ermöglichen. Diese Teilprüfungen lesen die entsprechenden Gruppen und ACLs read-only aus.'
+        Hintergrund = 'Nicht nur Gruppenmitgliedschaften, sondern auch einzelne Berechtigungen im Verzeichnis entscheiden, wer mächtige Aktionen ausführen darf. Schon ein einzelnes falsch vergebenes Recht (etwa zum Abruf aller Passwörter oder zum Ändern der Administrator-Vorlage) kann einem unprivilegierten Konto die vollständige Übernahme der Domäne ermöglichen. Diese Teilprüfungen lesen die betroffenen Gruppen und Berechtigungen read-only aus.'
         Beispiel = 'Ein an einen Anwendungs-Account delegiertes "Replicating Directory Changes All" genügt, um per DCSync alle Passwort-Hashes (inkl. krbtgt) abzuziehen.'
         Empfehlung = 'Privilegierte Rechte und ACLs auf das Nötigste reduzieren (Tier-0-Modell); delegierte Sonderrechte regelmäßig überprüfen und dokumentieren.'
         Quellen = @(
@@ -591,9 +591,9 @@ $CheckKatalog = @{
     }
     'dcsync' = @{
         Titel = 'DCSync-Rechte (Verzeichnis-Replikation)'; Schwere = 'Kritisch'
-        Zweck = 'Prüft am Domänenobjekt, welche Prinzipale die erweiterten Rechte "Replicating Directory Changes" und "Replicating Directory Changes All" besitzen - und meldet alle, die nicht zu den Standard-Berechtigten (DCs, Administratoren, SYSTEM) gehören.'
-        Hintergrund = 'DCSync missbraucht die Verzeichnis-Replikations-API (MS-DRSR / IDL_DRSGetNCChanges): Wer die Rechte DS-Replication-Get-Changes (GUID 1131f6aa-...) und Get-Changes-All (1131f6ad-...) auf dem Domänen-Naming-Context hat, kann sich gegenüber einem DC als DC ausgeben und beliebige Geheimnisse - inklusive der Passwort-Hashes aller Konten und des krbtgt-Schlüssels - abrufen, ohne Code auf einem DC auszuführen. Diese Rechte stehen normalerweise nur DCs, Administratoren und SYSTEM zu.'
-        Beispiel = 'Ein kompromittierter Account mit delegiertem Get-Changes-All zieht per Mimikatz/secretsdump alle Hashes und erzeugt anschließend ein Golden Ticket - vollständige Domänenübernahme.'
+        Zweck = 'Prüft, welche Konten und Gruppen die Replikationsrechte besitzen, mit denen sich Passwörter aus dem Verzeichnis abrufen lassen - und meldet alle, die dort nicht hingehören (normal nur Domänencontroller, Administratoren, SYSTEM).'
+        Hintergrund = 'Mit diesen Replikationsrechten (bekannt als "DCSync") kann sich ein Konto wie ein Domänencontroller verhalten und die Passwörter aller Benutzer abfragen - inklusive des zentralen krbtgt-Schlüssels, mit dem sich praktisch beliebige Identitäten fälschen lassen. Das funktioniert aus der Ferne, ohne Anmeldung an einem DC, und ist ein direkter Weg zur vollständigen Domänenübernahme. Solche Rechte sollten ausschließlich Domänencontroller besitzen.'
+        Beispiel = 'Ein übernommenes Konto mit diesen Rechten liest alle Passwort-Hashes aus und fälscht damit ein Admin-Ticket ("Golden Ticket") - die gesamte Domäne ist kompromittiert.'
         Empfehlung = 'Replikationsrechte ausschließlich Domänencontrollern gewähren; versehentlich delegierte Get-Changes(-All)-ACEs an Benutzern/Gruppen/Dienstkonten entfernen; Hybrid-Konten (z. B. Azure AD Connect / MSOL_) gezielt absichern und überwachen.'
         Quellen = @(
             @{ Titel = 'MITRE ATT&CK T1003.006 - OS Credential Dumping: DCSync'; Url = 'https://attack.mitre.org/techniques/T1003/006/' }
@@ -603,7 +603,7 @@ $CheckKatalog = @{
     'operatoren' = @{
         Titel = 'Gefährliche Builtin-/Operatoren-Gruppen'; Schwere = 'Hoch'
         Zweck = 'Listet die Mitglieder sicherheitskritischer, oft übersehener Gruppen: Account/Server/Print/Backup Operators sowie Schema- und Enterprise Admins. Diese Gruppen sollten im Normalbetrieb leer oder minimal besetzt sein.'
-        Hintergrund = 'Diese Builtin-Gruppen verleihen indirekt Tier-0-äquivalente Macht: Account Operators können (fast) beliebige Konten/Gruppen verwalten; Server/Print/Backup Operators dürfen sich an DCs anmelden bzw. Sicherungs-/Wiederherstellungsrechte nutzen, mit denen sich die AD-Datenbank (NTDS.dit) auslesen lässt; Schema und Enterprise Admins sind forestweit allmächtig. Microsoft schützt sie via AdminSDHolder, empfiehlt aber, ihre Nutzung zu minimieren.'
+        Hintergrund = 'Diese oft übersehenen Standardgruppen verleihen indirekt sehr weitreichende Macht: Account Operators können nahezu beliebige Konten verwalten; Backup-/Server Operators dürfen sich an Domänencontrollern anmelden bzw. die AD-Datenbank sichern und damit alle Passwörter auslesen; Schema- und Organisations-Admins sind forestweit allmächtig. Im Normalbetrieb sollten diese Gruppen leer oder minimal besetzt sein.'
         Beispiel = 'Ein Mitglied von Backup Operators sichert die NTDS.dit eines DCs und extrahiert offline alle Passwort-Hashes - ohne je Domain Admin gewesen zu sein.'
         Empfehlung = 'Mitgliedschaften dieser Gruppen entfernen bzw. auf das absolut Notwendige beschränken; statt dauerhafter Mitgliedschaft Just-in-time-Modelle nutzen; DnsAdmins gesondert prüfen (DLL-Ladepfad auf DCs).'
         Quellen = @(
@@ -613,9 +613,9 @@ $CheckKatalog = @{
     }
     'adminsdholder' = @{
         Titel = 'AdminSDHolder-ACL'; Schwere = 'Hoch'
-        Zweck = 'Prüft die ACL des AdminSDHolder-Objekts (CN=AdminSDHolder,CN=System,...) auf nicht-standardmäßige Prinzipale mit Schreib-/Vollzugriffsrechten.'
-        Hintergrund = 'Der SDProp-Prozess kopiert die ACL des AdminSDHolder-Objekts alle 60 Minuten auf alle geschützten Konten/Gruppen (AdminCount=1) und überschreibt deren Berechtigungen. Trägt ein Angreifer hier einen eigenen Prinzipal mit z. B. GenericAll/WriteDacl ein, erhält er dadurch dauerhaft Schreibzugriff auf alle Tier-0-Konten - eine verbreitete, schwer zu entdeckende Persistenz-Technik.'
-        Beispiel = 'Ein WriteDacl-Recht für einen unscheinbaren Account auf AdminSDHolder wird per SDProp auf Domain Admins vererbt; der Account kann sich anschließend selbst Vollzugriff auf jeden Admin geben.'
+        Zweck = 'Prüft die Berechtigungen des AdminSDHolder-Objekts auf Konten, die dort nicht standardmäßig Schreib- oder Vollzugriff haben sollten.'
+        Hintergrund = 'AdminSDHolder dient als Vorlage für die Berechtigungen aller privilegierten Konten und Gruppen: Das System überträgt seine Berechtigungen regelmäßig (etwa stündlich) auf diese Konten. Trägt ein Angreifer sich hier ein, erhält er dauerhaften Schreibzugriff auf sämtliche Administrator-Konten - eine versteckte Hintertür, die auch nach dem Zurücksetzen einzelner Konten bestehen bleibt.'
+        Beispiel = 'Ein unscheinbares Konto mit Schreibrecht auf AdminSDHolder erhält darüber automatisch Zugriff auf die Gruppe der Domänen-Admins und kann sich selbst Vollzugriff auf jedes Admin-Konto verschaffen.'
         Empfehlung = 'Auf AdminSDHolder nur die Standard-Prinzipale (SYSTEM, Domain/Enterprise Admins, Administratoren) mit Schreibrechten zulassen; abweichende ACEs entfernen und ihre Herkunft untersuchen.'
         Quellen = @(
             @{ Titel = 'Microsoft Learn - Appendix C: Protected Accounts and Groups in Active Directory'; Url = 'https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/appendix-c--protected-accounts-and-groups-in-active-directory' }
@@ -625,7 +625,7 @@ $CheckKatalog = @{
     'protected_users' = @{
         Titel = 'Protected Users (Nutzung)'; Schwere = 'Mittel'
         Zweck = 'Prüft, ob die Gruppe "Protected Users" verwendet wird, und listet ihre Mitglieder. Standardmäßig ist sie leer.'
-        Hintergrund = 'Mitglieder der Gruppe Protected Users erhalten nicht abschaltbare Schutzmaßnahmen: keine NTLM-Authentifizierung, kein DES/RC4 in der Kerberos-Vorauthentifizierung (nur AES), keine Delegation, kein zwischengespeicherter Credential-Verifier und ein auf 240 Minuten begrenztes TGT. Das reduziert die Wirkung von Credential-Theft erheblich. Dienst- und Computerkonten gehören NICHT hinein (deren Passwort liegt ohnehin lokal vor).'
+        Hintergrund = 'Mitglieder der Gruppe "Protected Users" erhalten automatisch mehrere nicht abschaltbare Schutzmaßnahmen (u. a. keine NTLM-Anmeldung, nur starke Verschlüsselung, keine Delegation, kürzere Ticket-Gültigkeit). Das erschwert Diebstahl und Wiederverwendung ihrer Anmeldedaten erheblich. Dienst- und Computerkonten gehören hier nicht hinein.'
         Beispiel = 'Sind privilegierte Benutzerkonten nicht in Protected Users, lässt sich ihr NTLM-Hash per Pass-the-Hash weiterverwenden; als Mitglied wäre dieser Weg blockiert.'
         Empfehlung = 'Privilegierte Benutzerkonten (keine Dienst-/Computerkonten) nach sorgfältigem Test in Protected Users aufnehmen; Funktionsebene >= 2012 R2 und vorhandene AES-Schlüssel sicherstellen.'
         Quellen = @(
@@ -636,7 +636,7 @@ $CheckKatalog = @{
     'prewin2000' = @{
         Titel = 'Pre-Windows 2000 Compatible Access'; Schwere = 'Mittel'
         Zweck = 'Prüft die Mitgliedschaft der Gruppe "Pre-Windows 2000 Compatible Access" - kritisch ist die Aufnahme von "Jeder" (Everyone) oder "Anonymous-Anmeldung".'
-        Hintergrund = 'Diese Builtin-Gruppe existiert aus Kompatibilitätsgründen mit sehr alten Systemen und gewährt Lesezugriff auf viele AD-Objekte. Enthält sie "Everyone" oder "Anonymous Logon", können auch nicht authentifizierte bzw. beliebige Benutzer umfangreiche Verzeichnisinformationen (z. B. Benutzer- und Gruppenlisten) auslesen - wertvolle Aufklärung für Angreifer.'
+        Hintergrund = 'Diese Gruppe existiert nur noch aus Kompatibilität mit sehr alten Systemen und gewährt Lesezugriff auf viele Verzeichnisobjekte. Enthält sie "Jeder" (Everyone) oder "Anonymous-Anmeldung", können selbst Benutzer ohne gültiges Konto umfangreiche Informationen wie Benutzer- und Gruppenlisten auslesen - wertvolle Aufklärung für einen Angreifer.'
         Beispiel = 'Ist "Anonymous Logon" Mitglied, kann ein Angreifer ohne gültiges Konto Benutzernamen und Gruppen enumerieren und so Spraying-/Roasting-Ziele finden.'
         Empfehlung = '"Everyone"/"Anonymous Logon" aus der Gruppe entfernen, sofern keine echten Legacy-Abhängigkeiten bestehen; die Mitgliedschaft auf das Nötigste reduzieren.'
         Quellen = @(
@@ -647,7 +647,7 @@ $CheckKatalog = @{
     'adcs' = @{
         Titel = 'AD CS - Zertifikatsdienste (ESC)'; Schwere = 'Hoch'
         Zweck = 'Untersucht die AD-Zertifikatsdienste (AD CS) auf die bekannten Eskalationspfade ESC1-ESC8: angreifbare Zertifikatvorlagen, manipulierbare Vorlagen-ACLs, gefährliche CA-Einstellungen und HTTP-Web-Enrollment.'
-        Hintergrund = 'AD CS stellt Zertifikate aus, u. a. für die Authentifizierung (Client Authentication, Smartcard Logon, PKINIT). SpecterOps hat 2021 acht Fehlkonfigurationsklassen (ESC1-ESC8) beschrieben, mit denen sich aus Sicht eines normalen Benutzers ein Anmeldezertifikat für einen Administrator ausstellen lässt - eine direkte, oft übersehene Domänenübernahme. Vorlagen und CAs liegen als Objekte unter CN=Public Key Services im Configuration-Naming-Context und werden hier read-only ausgelesen.'
+        Hintergrund = 'Die Zertifikatsdienste (AD CS) stellen u. a. Zertifikate aus, mit denen man sich anmelden kann. 2021 wurden acht Fehlkonfigurations-Klassen (ESC1-ESC8) bekannt, mit denen ein normaler Benutzer sich ein Zertifikat auf einen Administrator ausstellen und dessen Identität übernehmen kann - ein oft übersehener, direkter Weg zur Domänenübernahme. Vorlagen und Zertifizierungsstellen werden dafür read-only ausgelesen.'
         Beispiel = 'Eine einzige Vorlage, die "Antragsteller liefert Subject" erlaubt, Client-Authentication enthält und von "Domänen-Benutzer" angefordert werden darf, genügt für die vollständige Kompromittierung (ESC1).'
         Empfehlung = 'Vorlagen-Rechte und -Flags nach den ESC1-ESC8-Kriterien prüfen und härten; EDITF_ATTRIBUTESUBJECTALTNAME2 deaktivieren; Web-Enrollment absichern bzw. abschalten; Vorlagen-ACLs auf Schreibrechte für breite Gruppen kontrollieren.'
         Quellen = @(
@@ -658,7 +658,7 @@ $CheckKatalog = @{
     'esc1' = @{
         Titel = 'ESC1 (Enrollee Supplies Subject + Auth-EKU)'; Schwere = 'Kritisch'
         Zweck = 'Findet veröffentlichte Zertifikatvorlagen, die alle ESC1-Bedingungen erfüllen: "Antragsteller liefert Subject" (ENROLLEE_SUPPLIES_SUBJECT), eine Authentifizierungs-EKU, keine Manager-Genehmigung, keine geforderten Signaturen - und Enroll-Recht für niedrig privilegierte Prinzipale.'
-        Hintergrund = 'Bei ESC1 darf der Antragsteller den Subject (Alternative Name) der Vorlage selbst festlegen (msPKI-Certificate-Name-Flag-Bit ENROLLEE_SUPPLIES_SUBJECT). Enthält die Vorlage zusätzlich eine Authentifizierungs-EKU (Client Authentication 1.3.6.1.5.5.7.3.2, Smartcard Logon, PKINIT oder Any Purpose) und ist die Ausstellung ohne Genehmigung (kein PEND_ALL_REQUESTS) und ohne geforderte RA-Signaturen möglich, kann ein berechtigter Antragsteller ein Zertifikat auf "Administrator" ausstellen und sich damit per Kerberos PKINIT anmelden.'
+        Hintergrund = 'Bei ESC1 darf der Antragsteller bei einer Vorlage selbst bestimmen, für wen das Zertifikat gilt. Erlaubt die Vorlage zusätzlich die Anmeldung, verlangt keine Genehmigung und ist für normale Benutzer beantragbar, kann sich ein berechtigter Benutzer ein Zertifikat auf "Administrator" ausstellen und sich damit anmelden - eine vollständige Übernahme.'
         Beispiel = 'Ein Mitglied von "Domänen-Benutzer" fordert ein Zertifikat dieser Vorlage mit SAN=Administrator an und meldet sich anschließend als Domain Admin an.'
         Empfehlung = 'ENROLLEE_SUPPLIES_SUBJECT entfernen oder Manager-Genehmigung erzwingen; Enroll-Rechte auf benötigte, nicht-breite Gruppen einschränken; Authentifizierungs-EKUs nur dort belassen, wo nötig.'
         Quellen = @(
@@ -669,7 +669,7 @@ $CheckKatalog = @{
     'esc2_3' = @{
         Titel = 'ESC2/ESC3 (Any Purpose / Enrollment Agent)'; Schwere = 'Hoch'
         Zweck = 'Findet veröffentlichte Vorlagen mit Any-Purpose-EKU bzw. ohne EKU (ESC2) oder mit der Enrollment-Agent-EKU (ESC3), die von niedrig privilegierten Prinzipalen angefordert werden dürfen.'
-        Hintergrund = 'ESC2: Vorlagen mit Any Purpose (2.5.29.37.0) oder ganz ohne EKU erlauben es, das ausgestellte Zertifikat für nahezu beliebige Zwecke - inklusive Authentifizierung - zu verwenden. ESC3: Die Certificate-Request-Agent-EKU (1.3.6.1.4.1.311.20.2.1) erlaubt es, Zertifikate im Namen anderer zu beantragen (Enrollment Agent) - in Kombination mit anderen Vorlagen ein Weg zur Identitätsübernahme.'
+        Hintergrund = 'ESC2: Vorlagen, deren Zertifikate für nahezu beliebige Zwecke (inklusive Anmeldung) nutzbar sind. ESC3: Vorlagen mit der Berechtigung "Enrollment Agent", mit der sich Zertifikate im Namen anderer beantragen lassen. Beides kann missbraucht werden, um die Identität z. B. eines Administrators zu übernehmen.'
         Beispiel = 'Mit einem Enrollment-Agent-Zertifikat (ESC3) beantragt der Angreifer ein Smartcard-Logon-Zertifikat im Namen eines Administrators.'
         Empfehlung = 'Any-Purpose-/EKU-lose Vorlagen vermeiden; Enrollment-Agent-Vorlagen streng auf wenige, dedizierte Konten beschränken; Enroll-Rechte einschränken.'
         Quellen = @(
@@ -680,7 +680,7 @@ $CheckKatalog = @{
     'esc4' = @{
         Titel = 'ESC4 (manipulierbare Vorlagen-ACL)'; Schwere = 'Hoch'
         Zweck = 'Findet Zertifikatvorlagen, deren ACL niedrig privilegierten Prinzipalen Schreibrechte (GenericAll/GenericWrite/WriteDacl/WriteOwner/WriteProperty) gewährt.'
-        Hintergrund = 'Wer eine Vorlage bearbeiten darf, kann sie so umkonfigurieren, dass sie ESC1-angreifbar wird (ENROLLEE_SUPPLIES_SUBJECT setzen, Auth-EKU ergänzen, Genehmigung entfernen) und sich anschließend selbst ein Admin-Zertifikat ausstellen. Schreibrechte für breite Gruppen (Authenticated Users, Domänen-Benutzer) auf Vorlagen sind daher gleichwertig zu einer Übernahme-Möglichkeit.'
+        Hintergrund = 'Wer eine Zertifikatvorlage bearbeiten darf, kann sie selbst so umstellen, dass sie wie ESC1 angreifbar wird, und sich anschließend ein Admin-Zertifikat ausstellen. Schreibrechte auf Vorlagen für breite Gruppen (z. B. Authentifizierte Benutzer, Domänen-Benutzer) sind daher praktisch gleichbedeutend mit einer Übernahme-Möglichkeit.'
         Beispiel = 'Authenticated Users hat WriteProperty auf einer Vorlage - der Angreifer macht sie zu ESC1 und übernimmt die Domäne.'
         Empfehlung = 'Schreibrechte auf Zertifikatvorlagen ausschließlich PKI-Administratoren gewähren; breite Gruppen entfernen.'
         Quellen = @(
@@ -690,8 +690,8 @@ $CheckKatalog = @{
     }
     'esc6' = @{
         Titel = 'ESC6 (EDITF_ATTRIBUTESUBJECTALTNAME2)'; Schwere = 'Hoch'
-        Zweck = 'Prüft je CA, ob das Policy-Flag EDITF_ATTRIBUTESUBJECTALTNAME2 gesetzt ist (Abfrage über certutil).'
-        Hintergrund = 'Ist EDITF_ATTRIBUTESUBJECTALTNAME2 auf der CA aktiv, darf JEDER Antragsteller bei JEDER Vorlage einen beliebigen Subject Alternative Name (SAN) mitgeben - unabhängig davon, ob die Vorlage ENROLLEE_SUPPLIES_SUBJECT erlaubt. Damit wird praktisch jede client-auth-fähige Vorlage zu einem ESC1-Äquivalent. Das Flag ist eine CA-weite Fehlkonfiguration.'
+        Zweck = 'Prüft je Zertifizierungsstelle, ob die gefährliche CA-Einstellung EDITF_ATTRIBUTESUBJECTALTNAME2 aktiv ist (Abfrage über certutil).'
+        Hintergrund = 'Ist diese Einstellung an der Zertifizierungsstelle aktiv, darf bei jeder Vorlage jeder Antragsteller frei angeben, für wen das Zertifikat gelten soll. Damit wird praktisch jede anmeldefähige Vorlage angreifbar (wie ESC1) - ein Benutzer kann sich ein Zertifikat auf einen Administrator ausstellen. Es handelt sich um eine die gesamte CA betreffende Fehlkonfiguration.'
         Beispiel = 'Bei gesetztem Flag beantragt ein Benutzer ein gewöhnliches Zertifikat, schmuggelt aber SAN=Administrator hinein und meldet sich als Admin an.'
         Empfehlung = 'EDITF_ATTRIBUTESUBJECTALTNAME2 auf allen CAs deaktivieren (certutil -setreg policy\EditFlags -EDITF_ATTRIBUTESUBJECTALTNAME2; danach den Zertifikatdienst neu starten).'
         Quellen = @(
@@ -702,7 +702,7 @@ $CheckKatalog = @{
     'esc8' = @{
         Titel = 'ESC8 (HTTP Web Enrollment / NTLM-Relay)'; Schwere = 'Mittel'
         Zweck = 'Prüft je CA-Host, ob die Rolle "Web Enrollment" (HTTP-Antragsschnittstelle certsrv) installiert ist.'
-        Hintergrund = 'Die Web-Enrollment-Schnittstelle (certsrv) akzeptiert HTTP und standardmäßig NTLM-Authentifizierung. Ein Angreifer kann die NTLM-Authentifizierung eines Computerkontos (z. B. eines DCs, erzwungen via PetitPotam/PrinterBug) an diese Schnittstelle weiterleiten (Relay) und im Namen des Opfers ein Zertifikat ausstellen lassen - ein Weg zur DC-/Domänenübernahme.'
+        Hintergrund = 'Die Web-Anmeldeschnittstelle der Zertifizierungsstelle akzeptiert Anmeldungen über HTTP. Ein Angreifer kann einen Domänencontroller dazu zwingen, sich dort anzumelden, diese Anmeldung weiterleiten ("Relay") und in dessen Namen ein Zertifikat ausstellen lassen - ein Weg zur Übernahme des Domänencontrollers bzw. der Domäne.'
         Beispiel = 'Per PetitPotam wird ein DC zur NTLM-Authentifizierung gezwungen; diese wird an http://CA/certsrv relayt und ein DC-Zertifikat ausgestellt.'
         Empfehlung = 'Web-Enrollment nur wenn nötig betreiben; HTTPS mit Extended Protection (Channel Binding) erzwingen und NTLM deaktivieren; CA-/RPC-Endpunkte gegen Relay härten (siehe Microsoft ADV210003).'
         Quellen = @(
@@ -713,7 +713,7 @@ $CheckKatalog = @{
     'gpo_sysvol' = @{
         Titel = 'GPO & SYSVOL - Geheimnisse'; Schwere = 'Hoch'
         Zweck = 'Durchsucht SYSVOL und die GPO-Objekte nach hinterlegten Geheimnissen und gefährlichen Bearbeitungsrechten: GPP-Passwörter (cpassword), Klartext-Anmeldedaten in Skripten und breite Schreibrechte auf GPOs.'
-        Hintergrund = 'SYSVOL ist für alle Domänenbenutzer lesbar. Wer dort Passwörter (Group Policy Preferences) oder Anmeldedaten in Logon-/Startup-Skripten ablegt, gibt sie faktisch jedem authentifizierten Benutzer preis. Gleichzeitig entscheidet die ACL der GPO-Objekte, wer Richtlinien ändern darf - ein zu breit vergebenes Schreibrecht erlaubt das Ausrollen von Code auf alle erfassten Systeme.'
+        Hintergrund = 'SYSVOL ist eine für alle Domänenbenutzer lesbare Freigabe. Wer dort Passwörter oder Anmeldedaten (z. B. in Anmeldeskripten) ablegt, gibt sie faktisch jedem Benutzer preis. Außerdem entscheidet die Berechtigung auf den Gruppenrichtlinien, wer sie ändern darf - ein zu breit vergebenes Schreibrecht erlaubt das Ausrollen von Schadcode auf alle betroffenen Systeme.'
         Beispiel = 'Ein einziges cpassword in einer SYSVOL-XML genügt: Der AES-Schlüssel ist seit 2014 öffentlich, jeder Benutzer kann das Passwort entschlüsseln.'
         Empfehlung = 'GPP-Passwörter entfernen (MS14-025), Klartext-Credentials aus Skripten verbannen (gMSA/LAPS), GPO-Bearbeitungsrechte auf wenige Administratoren beschränken.'
         Quellen = @(
@@ -724,7 +724,7 @@ $CheckKatalog = @{
     'gpp_cpassword' = @{
         Titel = 'GPP-Passwörter (cpassword in SYSVOL)'; Schwere = 'Kritisch'
         Zweck = 'Durchsucht die GPP-XML-Dateien im SYSVOL (Groups.xml, Services.xml, ScheduledTasks.xml, DataSources.xml, Printers.xml, Drives.xml) nach cpassword-Werten und entschlüsselt sie zur Demonstration.'
-        Hintergrund = 'Group Policy Preferences konnten früher Passwörter (lokale Admins, Dienst-/Aufgabenkonten, Laufwerks-Mappings) verteilen. Diese werden als cpassword-Attribut AES-256-verschlüsselt in SYSVOL-XMLs abgelegt - der 32-Byte-Schlüssel wurde von Microsoft 2014 (MS14-025, CVE-2014-1812) öffentlich gemacht. Da jeder Domänenbenutzer SYSVOL lesen kann, ist jedes cpassword trivial entschlüsselbar. MS14-025 entfernt nur die Möglichkeit, NEUE solche Passwörter anzulegen - bestehende müssen manuell entfernt werden.'
+        Hintergrund = 'Über Gruppenrichtlinien konnten früher Passwörter (z. B. für lokale Administratoren oder Dienstkonten) verteilt werden. Sie liegen verschlüsselt in SYSVOL-Dateien - doch der zugehörige Schlüssel wurde 2014 von Microsoft öffentlich gemacht (MS14-025). Da jeder Domänenbenutzer SYSVOL lesen kann, ist ein solches Passwort trivial zu entschlüsseln. Der Patch verhindert nur das Anlegen neuer solcher Passwörter; bereits vorhandene müssen manuell entfernt werden.'
         Beispiel = 'Ein cpassword in Groups.xml setzt das lokale Administrator-Passwort auf allen Clients - der Angreifer entschlüsselt es und hat überall lokalen Admin.'
         Empfehlung = 'Alle cpassword-Vorkommen aus SYSVOL entfernen und die betroffenen Passwörter rotieren; für lokale Admin-Passwörter LAPS, für Dienstkonten gMSA verwenden.'
         Quellen = @(
@@ -746,7 +746,7 @@ $CheckKatalog = @{
     'gpo_rights' = @{
         Titel = 'GPO-Bearbeitungsrechte'; Schwere = 'Hoch'
         Zweck = 'Prüft die ACLs der GPO-Objekte auf Schreibrechte (GenericAll/GenericWrite/WriteDacl/WriteOwner/WriteProperty) für niedrig privilegierte/breite Prinzipale.'
-        Hintergrund = 'Wer eine verknüpfte GPO bearbeiten darf, kann auf allen davon erfassten Systemen Einstellungen, Skripte oder geplante Aufgaben ausrollen - inklusive Codeausführung als SYSTEM (MITRE T1484.001). Schreibrechte für breite Gruppen (Authenticated Users, Domänen-Benutzer) auf GPOs sind daher hochkritisch, besonders bei GPOs, die auf Domänencontroller oder Server wirken.'
+        Hintergrund = 'Wer eine verknüpfte Gruppenrichtlinie bearbeiten darf, kann auf allen davon betroffenen Systemen Einstellungen, Skripte oder Aufgaben ausrollen - bis hin zur Ausführung von Schadcode mit höchsten Rechten. Schreibrechte auf Gruppenrichtlinien für breite Gruppen (z. B. Authentifizierte Benutzer) sind daher hochkritisch, besonders bei Richtlinien, die auf Domänencontroller oder Server wirken.'
         Beispiel = 'Hat "Authenticated Users" GenericWrite auf der Default Domain Policy, kann jeder Benutzer ein Startup-Skript einschleusen, das auf allen Systemen als SYSTEM läuft.'
         Empfehlung = 'GPO-Bearbeitungsrechte ausschließlich dedizierten GPO-Administratoren gewähren; breite Gruppen entfernen; Änderungen überwachen.'
         Quellen = @(
@@ -757,7 +757,7 @@ $CheckKatalog = @{
     'dc_haertung' = @{
         Titel = 'DC-Härtung (vertieft)'; Schwere = 'Hoch'
         Zweck = 'Vertieft die DC-Härtung über die Basis-Checks hinaus: LDAP-Signing & Channel Binding, erzwungenes SMB-Signing, Print Spooler auf DCs und anonyme LDAP-Binds.'
-        Hintergrund = 'Domänencontroller sind Tier-0-Systeme. Mehrere verbreitete Angriffe (NTLM-Relay auf LDAP/SMB, Zwang zur Authentifizierung via PrinterBug/PetitPotam) lassen sich durch wenige Härtungseinstellungen entschärfen. Diese Teilprüfungen lesen die relevanten Registry-Werte/Dienste je DC sowie das dSHeuristics-Attribut read-only aus.'
+        Hintergrund = 'Domänencontroller sind die schützenswertesten Systeme der Domäne. Mehrere verbreitete Angriffe (Weiterleiten abgefangener Anmeldungen, erzwungene Authentifizierung über den Druckdienst) lassen sich durch wenige Härtungseinstellungen entschärfen. Diese Teilprüfungen lesen die relevanten Einstellungen und Dienste je Domänencontroller read-only aus.'
         Beispiel = 'Ist LDAP-Signing nicht erzwungen und der Print Spooler aktiv, kann ein Angreifer einen DC via PrinterBug zur NTLM-Authentifizierung zwingen und diese an einen anderen DC relayen.'
         Empfehlung = 'LDAP-Signing + Channel Binding erzwingen, SMB-Signing erforderlich setzen, Print Spooler auf DCs deaktivieren, anonyme LDAP-Binds unterbinden.'
         Quellen = @(
@@ -768,7 +768,7 @@ $CheckKatalog = @{
     'ldap_signing' = @{
         Titel = 'LDAP-Signing & Channel Binding'; Schwere = 'Hoch'
         Zweck = 'Liest je DC die Registry-Werte LDAPServerIntegrity (LDAP-Signing) und LdapEnforceChannelBinding (Channel Binding) aus.'
-        Hintergrund = 'Ohne erzwungenes LDAP-Signing akzeptiert der DC SASL-Binds ohne Integritätsschutz und einfache Binds über Klartext - anfällig für Replay- und Man-in-the-Middle-/Relay-Angriffe. LDAP Channel Binding (CBT) bindet die LDAPS-Authentifizierung an den TLS-Kanal und verhindert NTLM-Relay auf LDAPS. LDAPServerIntegrity=2 bedeutet "Signing erforderlich"; LdapEnforceChannelBinding=2 "immer".'
+        Hintergrund = 'Ohne erzwungenes LDAP-Signing nimmt der Domänencontroller Verzeichnisanfragen ohne ausreichenden Schutz entgegen - das ermöglicht Abhören und das Weiterleiten abgefangener Anmeldungen ("Relay"). Channel Binding bindet die verschlüsselte Anmeldung zusätzlich an die jeweilige Verbindung und unterbindet dieses Weiterleiten. Beides sollte erzwungen sein.'
         Beispiel = 'Ein Angreifer relayt die NTLM-Authentifizierung eines Computerkontos an den LDAP-Dienst eines DCs und trägt z. B. ein RBCD-Recht ein - ohne LDAP-Signing/CBT gelingt das.'
         Empfehlung = 'LDAPServerIntegrity auf 2 (erforderlich) und LdapEnforceChannelBinding auf 2 (immer) setzen; vorab per Event 2887 Clients identifizieren, die ungesignt binden.'
         Quellen = @(
@@ -779,7 +779,7 @@ $CheckKatalog = @{
     'smb_signing' = @{
         Titel = 'SMB-Signing (erforderlich)'; Schwere = 'Mittel'
         Zweck = 'Liest je DC den Registry-Wert RequireSecuritySignature (LanManServer) - ist SMB-Signing serverseitig erforderlich?'
-        Hintergrund = 'SMB-Signing versieht jede SMB-Nachricht mit einer Signatur (HMAC/AES) und verhindert so Manipulation und Relay-/Spoofing-Angriffe. DCs erzwingen Signing für SYSVOL/NETLOGON bereits standardmäßig; ein global nicht erzwungenes Signing (RequireSecuritySignature=0) lässt aber andere SMB-Verbindungen ungesignt und damit relay-fähig.'
+        Hintergrund = 'SMB-Signing versieht jede Datei-/Netzwerkanfrage mit einer Signatur und verhindert so Manipulation und das Weiterleiten abgefangener Anmeldungen. Für die Freigaben SYSVOL/NETLOGON erzwingen Domänencontroller das bereits; ist Signing darüber hinaus nicht generell erforderlich, bleiben andere Verbindungen ungeschützt und angreifbar.'
         Beispiel = 'Bei nicht erzwungenem SMB-Signing kann ein Angreifer eine SMB-Authentifizierung abfangen und an einen anderen Dienst weiterleiten.'
         Empfehlung = 'RequireSecuritySignature serverseitig auf 1 setzen (GPO: "Microsoft network server: Digitally sign communications (always)").'
         Quellen = @(
@@ -790,7 +790,7 @@ $CheckKatalog = @{
     'print_spooler' = @{
         Titel = 'Print Spooler auf DCs'; Schwere = 'Hoch'
         Zweck = 'Prüft je DC, ob der Druckwarteschlangen-Dienst (Print Spooler) läuft.'
-        Hintergrund = 'Der Print Spooler stellt eine RPC-Schnittstelle (MS-RPRN) bereit, über die sich ein DC zwingen lässt, sich gegen ein anderes System zu authentifizieren (PrinterBug). Kombiniert mit NTLM-Relay (z. B. auf LDAP oder AD CS) führt das zur DC-/Domänenübernahme. Auf DCs wird der Spooler praktisch nie benötigt (MITRE T1187 Forced Authentication).'
+        Hintergrund = 'Über den Druckwarteschlangen-Dienst lässt sich ein Domänencontroller dazu bringen, sich gegen ein anderes System zu authentifizieren ("PrinterBug"). Diese Anmeldung kann ein Angreifer weiterleiten (etwa an die Verzeichnis- oder Zertifikatsdienste) und so den Domänencontroller bzw. die Domäne übernehmen. Auf Domänencontrollern wird der Dienst praktisch nie benötigt.'
         Beispiel = 'Per PrinterBug zwingt der Angreifer DC-A, sich gegen seinen Relay-Server zu authentifizieren, und leitet diese Authentifizierung an die AD-CS-Web-Enrollment-Schnittstelle weiter (ESC8).'
         Empfehlung = 'Print Spooler auf allen DCs deaktivieren (Set-Service Spooler -StartupType Disabled; Stop-Service Spooler), sofern nicht zwingend benötigt.'
         Quellen = @(
@@ -801,7 +801,7 @@ $CheckKatalog = @{
     'anon_ldap' = @{
         Titel = 'Anonyme LDAP-Binds (dSHeuristics)'; Schwere = 'Mittel'
         Zweck = 'Liest das dSHeuristics-Attribut aus und prüft, ob anonyme LDAP-Operationen erlaubt sind (7. Zeichen = 2).'
-        Hintergrund = 'Das forestweite Attribut dSHeuristics steuert diverse Verzeichnis-Verhalten. Steht das 7. Zeichen auf "2", sind anonyme (nicht authentifizierte) LDAP-Binds/-Suchen erlaubt - ein Angreifer kann dann ohne Konto Benutzer-, Gruppen- und Konfigurationsinformationen auslesen (Aufklärung). Standardmäßig ist das nicht gesetzt.'
+        Hintergrund = 'Eine forestweite Verzeichnis-Einstellung (dSHeuristics) kann anonyme, nicht authentifizierte LDAP-Zugriffe erlauben. Ist das aktiviert, kann ein Angreifer ohne jedes Konto Benutzer-, Gruppen- und Konfigurationsdaten auslesen (Aufklärung). Standardmäßig ist das nicht gesetzt.'
         Beispiel = 'Bei erlaubten anonymen Binds enumeriert ein Angreifer aus dem Netz ohne gültiges Konto die gesamte Benutzerliste.'
         Empfehlung = 'Anonyme LDAP-Binds nicht erlauben (7. Zeichen von dSHeuristics nicht auf 2 setzen); falls für Altanwendungen nötig, eng begrenzen und überwachen.'
         Quellen = @(
@@ -811,8 +811,8 @@ $CheckKatalog = @{
     }
     'delta' = @{
         Titel = 'Veränderungen seit letztem Lauf (Delta)'; Schwere = 'Info'
-        Zweck = 'Vergleicht den aktuellen Lauf mit einem früheren JSON-Export und stellt neu hinzugekommene und behobene Befunde gegenüber. Technisch werden die als auffällig markierten Einträge (rot = kritisch/Fehler, gelb = Warnung) beider Läufe als Mengen gebildet und die Differenz berechnet.'
-        Hintergrund = 'Ein Sicherheits-Assessment entfaltet seinen Wert vor allem im Zeitverlauf: Eine Momentaufnahme zeigt den Zustand, erst der Vergleich zweier Läufe zeigt Fortschritt (Behebung) und Rückschritt (Drift, neue Funde). Der Delta-Modus liest über -Vergleich einen früheren JSON-Export ein, extrahiert aus beiden Datensätzen die rot/gelb markierten Ereignisse und ermittelt: NEU = im aktuellen Lauf vorhanden, im alten nicht (mögliche Regression oder neu entdeckte Schwachstelle); BEHOBEN = im alten Lauf vorhanden, jetzt nicht mehr. Der Abgleich erfolgt rein lokal über die JSON-Exporte - es werden keine zusätzlichen AD-Abfragen ausgelöst. So lassen sich Remediationsmaßnahmen belegen (z.B. gegenüber Audit/Management) und schleichende Verschlechterungen früh erkennen.'
+        Zweck = 'Vergleicht den aktuellen Lauf mit einem früheren JSON-Export und stellt gegenüber, welche Befunde neu hinzugekommen und welche behoben sind (Grundlage sind die rot/gelb markierten Einträge beider Läufe).'
+        Hintergrund = 'Ein Assessment ist vor allem im Zeitverlauf aussagekräftig: Eine Momentaufnahme zeigt den Zustand, erst der Vergleich zweier Läufe zeigt Fortschritt (behobene Punkte) und Rückschritt (neue Funde). Der Delta-Modus liest dazu über -Vergleich einen früheren Export ein und stellt neue und behobene Befunde gegenüber. Der Abgleich erfolgt rein lokal über die Exporte, ohne zusätzliche AD-Abfragen - ideal, um Fortschritt gegenüber Audit/Management zu belegen.'
         Beispiel = 'Nach dem Entfernen der Enroll-Berechtigung an einer verwundbaren Zertifikatsvorlage erscheint der ESC1-Befund im nächsten Lauf unter "Behoben". Taucht hingegen ein neuer Domänen-Admin oder eine neue kerberoastbare Dienst-SPN auf, listet ihn der Bereich unter "Neu".'
         Empfehlung = 'Den JSON-Export jedes Assessments revisionssicher aufbewahren (Datum/DC im Dateinamen) und beim nächsten Lauf via -Vergleich referenzieren. Neue Befunde priorisiert prüfen; behobene als Nachweis dokumentieren. Den Vergleich möglichst gegen denselben DC bzw. dieselbe Domäne fahren, damit die Mengen vergleichbar sind.'
         Quellen = @(
