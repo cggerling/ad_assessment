@@ -232,12 +232,12 @@ if (-not (Get-Module -ListAvailable -Name ActiveDirectory)) {                   
 }                                                                                                  #
 if ($allgpo -ge 1 -and -not (Get-Module -ListAvailable -Name GroupPolicy)) {                       #
     Write-Host "WARNUNG: PowerShell-Modul 'GroupPolicy' nicht gefunden." -ForegroundColor $F_Fehler
-    Write-Host "         Der GPO-Check wird uebersprungen (allgpo=0)." -ForegroundColor $F_Fehler
+    Write-Host "         Der GPO-Check wird übersprungen (allgpo=0)." -ForegroundColor $F_Fehler
     $allgpo = 0                                  # Bereich deaktivieren statt Laufzeitfehler       #
 }                                                                                                  #
 if ($dnschk -ge 1 -and -not (Get-Module -ListAvailable -Name DnsServer)) {                         #
     Write-Host "WARNUNG: PowerShell-Modul 'DnsServer' nicht gefunden." -ForegroundColor $F_Fehler
-    Write-Host "         Die DNS-Pruefung wird uebersprungen (dnschk=0)." -ForegroundColor $F_Fehler
+    Write-Host "         Die DNS-Prüfung wird übersprungen (dnschk=0)." -ForegroundColor $F_Fehler
     $dnschk = 0                                  # Bereich deaktivieren statt Laufzeitfehler       #
 }                                                                                                  #
 ####################################################################################################
@@ -1674,7 +1674,7 @@ try { $DCs = (Get-ADForest).Domains | ForEach-Object{Get-ADDomainController -Fil
 catch { $DCs = $null }
 if (-not $DCs) {
     Write-Host "FEHLER : Domain Controller konnten nicht ermittelt werden." -ForegroundColor $F_Fehler
-    Write-Host "         Besteht eine Verbindung zur Domaene? Das Skript wird beendet." -ForegroundColor $F_Fehler
+    Write-Host "         Besteht eine Verbindung zur Domäne? Das Skript wird beendet." -ForegroundColor $F_Fehler
     exit 1
 }
 ####################################################################################################
@@ -1961,7 +1961,7 @@ function trusts {
             new_2werte "s" ":" "23" "- Direction" "" "l" "$direct" "" "l"
             new_2werte "s" ":" "23" "- Gebunden an IP" "" "l" "$t_ip" "" "l"
             new_2werte "s" ":" "23" "- Wurde erstellt am" "" "l" "$t_wcreated" "" "l"
-            new_2werte "s" ":" "23" "- Wurde geaendert am" "" "l" "$t_wchanged" "" "l"
+            new_2werte "s" ":" "23" "- Wurde geändert am" "" "l" "$t_wchanged" "" "l"
             Leerzeile
         }
     }
@@ -2298,7 +2298,7 @@ function controller_check {
 				2werte "" $rol "s"
 			}
 			Leerzeile
-            Bereichstitel "Netzwerk Pruefung:" "s"
+            Bereichstitel "Netzwerk Prüfung:" "s"
             Leerzeile
             if((Get-DomainControllerNSLookup $domainController.HostName) -eq "Bestanden") { $fdnl = "Green" } 
                 else { $fdnl = "Red"}
@@ -2318,7 +2318,7 @@ function controller_check {
 			2werte " NTDS/DIT   - Free Space (%):" $d_free "s" $d_freef
 			2werte " OS-Volumen - Free Space (%):" $o_free "s" $o_freef
             Leerzeile
-            Bereichstitel "Verfuegbarkeit AD-Dienste:" "s"
+            Bereichstitel "Verfügbarkeit AD-Dienste:" "s"
             Leerzeile
             $stat_DNS = Get-DNSService $domainController.HostName
             if($stat_DNS -eq "Bestanden") { $stat_DNS_f = "Green"} else { $stat_DNS_f = "Red"}
@@ -2330,7 +2330,7 @@ function controller_check {
 			2werte " NTDS Service    :" $stat_NTDS "s" $stat_NTDS_f
 			2werte " NetLogon Service:" $stat_Netlogon "s" $stat_Netlogon_f
 			Leerzeile
-            Bereichstitel "DC Diagnostic Pruefung:" "s"
+            Bereichstitel "DC Diagnostic Prüfung:" "s"
             Leerzeile
             if($DCDiagTestResults.Replications -eq "Bestanden") { $dcr = "Green" } 
                 else { $dcr = "Red"}
@@ -2590,7 +2590,7 @@ function inaktive_User {
     if($ina_anza -ne 0) {
         Bereichstitel "Inaktive Benutzer Accounts:" ""
         Leerzeile
-        Subtitel "Benutzer (inaktiv), letzte Anmeldung ueber 2 Monate her:" "1" "-"
+        Subtitel "Benutzer (inaktiv), letzte Anmeldung über 2 Monate her:" "1" "-"
         new_2werte "s" ":" "31" "- Anzahl der inaktiven Benutzer" "" "l" "$ina_anza" "" "l"
         Leerzeile
         neu_tab_max6w_fb "3" "l" "s" "17" "Name" "SamAccountName" "Letzte Anmeldung" "Account Status"
@@ -3534,23 +3534,23 @@ function spezial_user {
     Leerzeile
     $uohne = Get-ADUser -Filter * -Property * | Where-Object { $_.userAccountControl -eq "544" }
     if($uohne) { 
-        pw_user "Benutzer, die kein Kennwort hinterlegen muessen (544):" $uohne
+        pw_user "Benutzer, die kein Kennwort hinterlegen müssen (544):" $uohne
     }
     $ulauf = Get-ADUser -Filter * -Property * | Where-Object { $_.userAccountControl -eq "66048" }
     if($ulauf) { 
-        pw_user "Benutzer, deren Kennwort nie ablaeuft (66048):" $ulauf
+        pw_user "Benutzer, deren Kennwort nie abläuft (66048):" $ulauf
     }
     $ohneuablauf = Get-ADUser -Filter * -Property * | Where-Object { $_.userAccountControl -eq "66080" }
     if($ohneuablauf) { 
-        pw_user "Benutzer, die kein Kennwort brauchen, das auch nie ablaeuft (66080):" $ohneuablauf
+        pw_user "Benutzer, die kein Kennwort brauchen, das auch nie abläuft (66080):" $ohneuablauf
     }
     $uohnedeak = Get-ADUser -Filter * -Property * | Where-Object { $_.userAccountControl -eq "546" }
     if ($uohnedeak) { 
-        pw_user "Deak. Benutzer, die kein Kennwort hinterlegt haben muessen (546):" $uohnedeak
+        pw_user "Deak. Benutzer, die kein Kennwort hinterlegt haben müssen (546):" $uohnedeak
     }
     $de_op_nie = Get-ADUser -Filter * -Property * | Where-Object { $_.userAccountControl -eq "66082" }
     if ($de_op_nie) {
-        pw_user "Deak. Benutzer, die kein Kennwort brauchen, das auch nie ablaeuft (66082):" $de_op_nie
+        pw_user "Deak. Benutzer, die kein Kennwort brauchen, das auch nie abläuft (66082):" $de_op_nie
     }
 }
 ####################################################################################################
@@ -4019,10 +4019,10 @@ function dc_ldaps ($dc){
     $TcpClient2 = New-Object System.Net.Sockets.TcpClient($HostName,$Port2)
     if ($null -eq $TcpClient1) { $wert1 = "n.a." ; $fa1 = "Red" } else { $wert1 = "enabled" ; $fa1 = "Green" }
     if ($null -eq $TcpClient2) { $Wert2 = "n.a." ; $fa2 = "Red" } else { $Wert2 = "enabled" ; $fa2 = "Green" }
-    Bereichstitel "Voraussetzungen fuer LDAPS:" "s"
+    Bereichstitel "Voraussetzungen für LDAPS:" "s"
     Leerzeile
-    2werte " Zugriff ueber Port  636 moeglich:" $wert1 "s" $fa1
-    2werte " Zugriff ueber Port 3269 moeglich:" $wert2 "s" $fa2
+    2werte " Zugriff über Port  636 möglich:" $wert1 "s" $fa1
+    2werte " Zugriff über Port 3269 möglich:" $wert2 "s" $fa2
     Leerzeile
 }
 function NTLM ($dcakt){
@@ -4192,12 +4192,12 @@ function chk_delegation {
     $uncon = @(Get-ADObject -LDAPFilter '(userAccountControl:1.2.840.113556.1.4.803:=524288)' `
                 -Properties samAccountName | Where-Object { $dcNamen -notcontains ($_.samAccountName -replace '\$$','') })
     if ($uncon.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
-    2werte "Uneingeschraenkte Delegation (ohne DCs):" "$($uncon.Count)" "s" $fa
+    2werte "Uneingeschränkte Delegation (ohne DCs):" "$($uncon.Count)" "s" $fa
     foreach ($o in $uncon) { 2werte " $($o.samAccountName)" "TrustedForDelegation" "s" $F_Fehler }
     # 2) Eingeschraenkte Delegation (msDS-AllowedToDelegateTo gesetzt)
     $con = @(Get-ADObject -LDAPFilter '(msDS-AllowedToDelegateTo=*)' -Properties samAccountName)
     if ($con.Count -gt 0) { $fa = 'Yellow' } else { $fa = 'Green' }
-    2werte "Eingeschraenkte Delegation:" "$($con.Count)" "s" $fa
+    2werte "Eingeschränkte Delegation:" "$($con.Count)" "s" $fa
     foreach ($o in $con) { 2werte " $($o.samAccountName)" "AllowedToDelegateTo" "s" "Yellow" }
     # 3) Ressourcenbasierte Delegation (msDS-AllowedToActOnBehalfOfOtherIdentity gesetzt)
     $rbcd = @(Get-ADObject -LDAPFilter '(msDS-AllowedToActOnBehalfOfOtherIdentity=*)' -Properties samAccountName)
@@ -4323,7 +4323,7 @@ function chk_prewin2000 {
             if ($kritSids -contains "$($mm.SID)") { $mfa = $F_Fehler } else { $mfa = $F_Text }
             2werte "   - $($mm.SamAccountName)" "$($mm.SID)" "s" $mfa
         }
-    } catch { 2werte "Pre-Windows 2000 Compatible Access:" "nicht abfragbar (ggf. Spezial-Identitaeten)" "s" "Yellow" }
+    } catch { 2werte "Pre-Windows 2000 Compatible Access:" "nicht abfragbar (ggf. Spezial-Identitäten)" "s" "Yellow" }
 }
 ####################################################################################################
 # Sicherheit Paket C: AD CS / ESC (read-only AD-Objekte + certutil)                                #
@@ -4367,7 +4367,7 @@ function chk_adcs_inventory {
     $o = Get-ADCSObjekte
     2werte "Zertifizierungsstellen (CAs):" "$($o.CAs.Count)" "s"
     foreach ($ca in $o.CAs) { 2werte " - $($ca.Name)" "$($ca.dNSHostName)" "s" }
-    2werte "Vorlagen gesamt / veroeffentlicht:" "$($o.Templates.Count) / $($o.Published.Count)" "s"
+    2werte "Vorlagen gesamt / veröffentlicht:" "$($o.Templates.Count) / $($o.Published.Count)" "s"
 }
 function chk_esc1 {
     $o = Get-ADCSObjekte
@@ -4385,10 +4385,10 @@ function chk_esc1 {
         if ($enroller.Count -gt 0) { $treffer += [pscustomobject]@{ Name = "$($t.displayName)"; Enroll = ($enroller -join ', ') } }
     }
     if ($treffer.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
-    2werte "ESC1-verdaechtige Vorlagen:" "$($treffer.Count)" "s" $fa
+    2werte "ESC1-verdächtige Vorlagen:" "$($treffer.Count)" "s" $fa
     foreach ($x in $treffer) {
         2werte " Vorlage: $($x.Name)" "ESC1 (Subject frei + Auth-EKU, kein Approval)" "s" $F_Fehler
-        2werte "   Enroll fuer:" $x.Enroll "s" $F_Fehler
+        2werte "   Enroll für:" $x.Enroll "s" $F_Fehler
     }
     if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine ESC1-Vorlage gefunden" "s" "Green" }
 }
@@ -4409,10 +4409,10 @@ function chk_esc2_3 {
         }
     }
     if ($tr.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
-    2werte "ESC2/ESC3-verdaechtige Vorlagen:" "$($tr.Count)" "s" $fa
+    2werte "ESC2/ESC3-verdächtige Vorlagen:" "$($tr.Count)" "s" $fa
     foreach ($x in $tr) {
         2werte " Vorlage: $($x.Name)" $x.Typ "s" $F_Fehler
-        2werte "   Enroll fuer:" $x.Enroll "s" $F_Fehler
+        2werte "   Enroll für:" $x.Enroll "s" $F_Fehler
     }
     if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine ESC2/ESC3-Vorlage gefunden" "s" "Green" }
 }
@@ -4432,7 +4432,7 @@ function chk_esc4 {
         }
     }
     if ($tr.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
-    2werte "ESC4 (Vorlagen mit Schreibrecht fuer breite Gruppen):" "$($tr.Count)" "s" $fa
+    2werte "ESC4 (Vorlagen mit Schreibrecht für breite Gruppen):" "$($tr.Count)" "s" $fa
     foreach ($x in $tr) { 2werte " Vorlage: $($x.Name)" "Schreibrecht von $($x.Wer): $($x.Recht)" "s" $F_Fehler }
     if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine ESC4-Vorlage gefunden" "s" "Green" }
 }
@@ -4443,7 +4443,7 @@ function chk_esc6 {
         $cfg = "$($ca.dNSHostName)\$($ca.Name)"
         try {
             $out = certutil -config $cfg -getreg policy\EditFlags 2>&1 | Out-String
-            if ($out -match 'EDITF_ATTRIBUTESUBJECTALTNAME2') { $fa = $F_Fehler; $st = 'GESETZT (gefaehrlich)' }
+            if ($out -match 'EDITF_ATTRIBUTESUBJECTALTNAME2') { $fa = $F_Fehler; $st = 'GESETZT (gefährlich)' }
             else { $fa = 'Green'; $st = 'nicht gesetzt' }
             2werte " $cfg" $st "s" $fa
         } catch { 2werte " $cfg" "nicht abfragbar (CA/Recht)" "s" "Yellow" }
@@ -4477,7 +4477,7 @@ function Entschluessle-GPP ($cpassword) {
         $dec = $aes.CreateDecryptor()
         $out = $dec.TransformFinalBlock($bytes, 0, $bytes.Length)
         return [System.Text.Encoding]::Unicode.GetString($out)
-    } catch { return '<nicht entschluesselbar>' }
+    } catch { return '<nicht entschlüsselbar>' }
 }
 function chk_gpp_cpassword {
     $dom = (Get-ADDomain).DNSRoot
@@ -4498,9 +4498,9 @@ function chk_gpp_cpassword {
     2werte "GPP-cpassword-Fundstellen:" "$($treffer.Count)" "s" $fa
     foreach ($x in $treffer) {
         2werte " Datei: $($x.Datei)" "cpassword gefunden" "s" $F_Fehler
-        2werte "   Entschluesselt:" $x.Klar "s" $F_Fehler
+        2werte "   Entschlüsselt:" $x.Klar "s" $F_Fehler
     }
-    if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine GPP-Passwoerter im SYSVOL" "s" "Green" }
+    if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine GPP-Passwörter im SYSVOL" "s" "Green" }
 }
 function chk_sysvol_scripts {
     $dom = (Get-ADDomain).DNSRoot
@@ -4520,9 +4520,9 @@ function chk_sysvol_scripts {
         }
     }
     if ($treffer.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
-    2werte "Verdaechtige Skripte (heuristisch):" "$($treffer.Count)" "s" $fa
+    2werte "Verdächtige Skripte (heuristisch):" "$($treffer.Count)" "s" $fa
     foreach ($x in $treffer) { 2werte " $($x.Datei)" "Muster: $($x.Muster)" "s" $F_Fehler }
-    if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine auffaelligen Skripte gefunden" "s" "Green" }
+    if ($treffer.Count -eq 0) { 2werte " Hinweis:" "keine auffälligen Skripte gefunden" "s" "Green" }
 }
 function chk_gpo_rights {
     $domDN = (Get-ADDomain).DistinguishedName
@@ -4542,7 +4542,7 @@ function chk_gpo_rights {
         }
     }
     if ($tr.Count -gt 0) { $fa = $F_Fehler } else { $fa = 'Green' }
-    2werte "GPOs mit Schreibrecht fuer breite Gruppen:" "$($tr.Count)" "s" $fa
+    2werte "GPOs mit Schreibrecht für breite Gruppen:" "$($tr.Count)" "s" $fa
     foreach ($x in $tr) { 2werte " GPO: $($x.GPO)" "Schreibrecht von $($x.Wer): $($x.Recht)" "s" $F_Fehler }
     if ($tr.Count -eq 0) { 2werte " Hinweis:" "keine GPO mit breitem Schreibrecht" "s" "Green" }
 }
@@ -4563,7 +4563,7 @@ function chk_ldap_signing {
             if ("$($reg.Integrity)" -eq '2') { $sig = 'erforderlich'; $sfa = 'Green' } else { $sig = 'NICHT erforderlich'; $sfa = $F_Fehler }
             switch ("$($reg.CBT)") {
                 '2'     { $cbt = 'immer';             $cfa = 'Green' }
-                '1'     { $cbt = 'wenn unterstuetzt'; $cfa = 'Yellow' }
+                '1'     { $cbt = 'wenn unterstützt'; $cfa = 'Yellow' }
                 default { $cbt = 'aus/nicht gesetzt'; $cfa = $F_Fehler }
             }
             2werte " $($dc.Name) - LDAP-Signing:" $sig "s" $sfa
@@ -4589,7 +4589,7 @@ function chk_print_spooler {
         $h = $dc.HostName
         try {
             $svc = Get-Service -ComputerName $h -Name Spooler -ErrorAction Stop
-            if ($svc.Status -eq 'Running') { $st = 'laeuft (PrinterBug/PetitPotam-Risiko)'; $fa = $F_Fehler } else { $st = "$($svc.Status)"; $fa = 'Green' }
+            if ($svc.Status -eq 'Running') { $st = 'läuft (PrinterBug/PetitPotam-Risiko)'; $fa = $F_Fehler } else { $st = "$($svc.Status)"; $fa = 'Green' }
             2werte " $($dc.Name) - Print Spooler:" $st "s" $fa
         } catch { 2werte " $($dc.Name):" "nicht abfragbar" "s" "Yellow" }
     }
@@ -4613,7 +4613,7 @@ function chk_anon_ldap {
     } catch { 2werte "dSHeuristics:" "nicht abfragbar" "s" "Yellow" }
 }
 ####################################################################################################
-## Paket F - Delta-Modus: Vergleich mit frueherem JSON-Export                                      ##
+## Paket F - Delta-Modus: Vergleich mit früherem JSON-Export                                      ##
 ####################################################################################################
 function Extrahiere-Befunde ($ereignisse) {
     # Bildet aus einer Ereignisliste die Menge der auffaelligen Befunde (rot/gelb).
@@ -4641,11 +4641,11 @@ function chk_delta ($altPfad) {
     try {
         $alt = Get-Content -LiteralPath $altPfad -Raw -Encoding UTF8 | ConvertFrom-Json
     } catch {
-        2werte "Vergleichsdatei:" "nicht lesbar (kein gueltiges JSON)" "s" "Yellow"; return
+        2werte "Vergleichsdatei:" "nicht lesbar (kein gültiges JSON)" "s" "Yellow"; return
     }
     $altEreignisse = if ($alt.PSObject.Properties.Name -contains 'Ereignisse') { $alt.Ereignisse } else { $alt }
     if ($R_Daten.Count -eq 0) {
-        2werte "Hinweis:" "Aktueller Lauf ohne Export - Delta nicht moeglich (HTML/JSON aktiv lassen)" "s" "Yellow"; return
+        2werte "Hinweis:" "Aktueller Lauf ohne Export - Delta nicht möglich (HTML/JSON aktiv lassen)" "s" "Yellow"; return
     }
     $alteBefunde = Extrahiere-Befunde $altEreignisse
     $neueBefunde = Extrahiere-Befunde $R_Daten
@@ -4752,15 +4752,15 @@ if($admusr -ge 1){
     }
 }
 ####################################################################################################
-## Bereich "Kerberos - Angriffsflaechen" (Paket A)                                                ##
+## Bereich "Kerberos - Angriffsflächen" (Paket A)                                                ##
 ####################################################################################################
 if($kerbchk -ge 1){
-    Pruefbereich "Kerberos - Angriffsflaechen" -CheckId 'kerberos' {
+    Pruefbereich "Kerberos - Angriffsflächen" -CheckId 'kerberos' {
         Leerzeile
         Unterpruefung "Kerberoasting (Konten mit SPN)" 'kerberoasting' { chk_kerberoasting }
         Unterpruefung "AS-REP Roasting (ohne Vorauthentifizierung)" 'asrep' { chk_asrep }
         Unterpruefung "Delegation (Unconstrained / Constrained / RBCD)" 'delegation' { chk_delegation }
-        Unterpruefung "Schwache Kerberos-Verschluesselung" 'kerb_enc' { chk_kerb_enc }
+        Unterpruefung "Schwache Kerberos-Verschlüsselung" 'kerb_enc' { chk_kerb_enc }
         Unterpruefung "Computerkonten-Kontingent (MachineAccountQuota)" 'machine_quota' { chk_machine_quota }
     }
 }
@@ -4771,7 +4771,7 @@ if($privchk -ge 1){
     Pruefbereich "Privilegien & ACLs" -CheckId 'privilegien' {
         Leerzeile
         Unterpruefung "DCSync-Rechte (Verzeichnis-Replikation)" 'dcsync' { chk_dcsync }
-        Unterpruefung "Gefaehrliche Builtin-/Operatoren-Gruppen" 'operatoren' { chk_operatoren }
+        Unterpruefung "Gefährliche Builtin-/Operatoren-Gruppen" 'operatoren' { chk_operatoren }
         Unterpruefung "AdminSDHolder-ACL" 'adminsdholder' { chk_adminsdholder }
         Unterpruefung "Protected Users (Nutzung)" 'protected_users' { chk_protected_users }
         Unterpruefung "Pre-Windows 2000 Compatible Access" 'prewin2000' { chk_prewin2000 }
@@ -4797,16 +4797,16 @@ if($adcschk -ge 1){
 if($sysvchk -ge 1){
     Pruefbereich "GPO & SYSVOL - Geheimnisse" -CheckId 'gpo_sysvol' {
         Leerzeile
-        Unterpruefung "GPP-Passwoerter (cpassword in SYSVOL)" 'gpp_cpassword' { chk_gpp_cpassword }
+        Unterpruefung "GPP-Passwörter (cpassword in SYSVOL)" 'gpp_cpassword' { chk_gpp_cpassword }
         Unterpruefung "Klartext-Credentials in SYSVOL-Skripten" 'sysvol_scripts' { chk_sysvol_scripts }
         Unterpruefung "GPO-Bearbeitungsrechte" 'gpo_rights' { chk_gpo_rights }
     }
 }
 ####################################################################################################
-## Bereich "DC-Haertung (vertieft)" (Paket E)                                                      ##
+## Bereich "DC-Härtung (vertieft)" (Paket E)                                                      ##
 ####################################################################################################
 if($dchaert -ge 1){
-    Pruefbereich "DC-Haertung (vertieft)" -CheckId 'dc_haertung' {
+    Pruefbereich "DC-Härtung (vertieft)" -CheckId 'dc_haertung' {
         Leerzeile
         Unterpruefung "LDAP-Signing und Channel Binding" 'ldap_signing' { chk_ldap_signing }
         Unterpruefung "SMB-Signing (erforderlich)" 'smb_signing' { chk_smb_signing }
@@ -4959,12 +4959,12 @@ if ($DomCon -ge 1) {
     }
 }
 ####################################################################################################
-## Bereich "Veraenderungen seit letztem Lauf (Delta)" (Paket F)                                    ##
+## Bereich "Veränderungen seit letztem Lauf (Delta)" (Paket F)                                    ##
 ####################################################################################################
 if ($deltchk -ge 1 -and $Vergleich) {
-    Pruefbereich "Veraenderungen seit letztem Lauf (Delta)" -CheckId 'delta' {
+    Pruefbereich "Veränderungen seit letztem Lauf (Delta)" -CheckId 'delta' {
         Leerzeile
-        Unterpruefung "Vergleich mit frueherem JSON-Export" 'delta' { chk_delta $Vergleich }
+        Unterpruefung "Vergleich mit früherem JSON-Export" 'delta' { chk_delta $Vergleich }
     }
 }
 ####################################################################################################

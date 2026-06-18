@@ -123,6 +123,23 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Umlaut-Feinschliff Teil 2 „Alt-Labels de-transliteriert" (Juni 2026):**
+- Die verbliebenen ~42 ASCII-transliterierten **Anzeige-Labels und Abschnittstitel** (z. B.
+  „DC-Härtung (vertieft)", „Kerberos - Angriffsflächen", „GPP-Passwörter", „Veränderungen seit
+  letztem Lauf", „Verfügbarkeit AD-Dienste", „über Port … möglich", „Uneingeschränkte
+  Delegation", „läuft (PrinterBug/PetitPotam)", „für breite Gruppen", „gefährlich") auf echte
+  Umlaute umgestellt. Damit nutzen Text-Report, HTML und JSON jetzt durchgängig korrekte Umlaute.
+- Methode: per AST alle deutschen Transliterations-Strings extrahiert (CSS, Datumsformate,
+  englische Begriffe, bereits korrekte Texte ausgeschlossen), dann verifizierte Voll-Fragment-
+  Ersetzung (Umlaute aus Zeichencodes erzeugt, kein blindes ae/oe/ue/ss-Replace). **Code-
+  Identifier unangetastet** (CheckIds wie `dc_haertung`, Funktionsnamen `Pruefbereich`/
+  `Unterpruefung`/`Entschluessle-GPP`, Switches, AD-Filter, Registry-Pfade). Kontrolle danach:
+  0 verbliebene transliterierte Labels, Parse OK.
+- Tests unverändert grün (**92**, PS 7 + 5.1).
+- Damit ist der Umlaut-Feinschliff abgeschlossen. Offen bleibt nur noch die optionale
+  inhaltliche Tiefen-Justierung der Texte („technischer/weniger technisch"), am besten am echten
+  Report bewertet.
+
 **Umlaut-Feinschliff Teil 1 „Encoding-Fundament" (Juni 2026):**
 - Text-Report jetzt **UTF-8 mit BOM** statt ASCII: Datei wird per
   `[IO.File]::WriteAllText($path,'',UTF8(BOM))` angelegt, der gepufferte Inhalt per
