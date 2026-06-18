@@ -83,7 +83,7 @@ Describe 'Analyse_V4_6.ps1' {
             # dann lesen. Komma-Operator: verhindert, dass die Pipeline ein 1-Zeilen-Array
             # zum einzelnen String entrollt ($z[0] waere sonst ein [char]).
             Puffer_leeren
-            , @(Get-Content -LiteralPath $global:path)
+            , @(Get-Content -LiteralPath $global:path -Encoding UTF8)
         }
     }
 
@@ -134,6 +134,14 @@ Describe 'Analyse_V4_6.ps1' {
             $bytes[0] | Should -Be 0xEF
             $bytes[1] | Should -Be 0xBB
             $bytes[2] | Should -Be 0xBF
+        }
+
+        It 'schreibt den Text-Report als UTF-8 (kein -Encoding ascii, keine Transliteration mehr)' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Not -Match '-Encoding ascii'              # kein ASCII-Report mehr
+            $inhalt | Should -Match 'AppendAllText\(\$path'             # Puffer wird per .NET UTF-8 angehaengt
+            $inhalt | Should -Match 'WriteAllText\(\$path'              # Report mit UTF-8-BOM angelegt
+            $inhalt | Should -Not -Match "-replace 'ü'"                 # neu_text transliteriert nicht mehr
         }
 
         It 'enthaelt die Modul-Vorabpruefung' {
@@ -215,11 +223,13 @@ Describe 'Analyse_V4_6.ps1' {
             $ausgabe | Should -Match 'ActiveDirectory'
         }
 
-        It 'buendelt die Datei-Ausgabe (genau eine Add-Content-Stelle: Puffer_leeren)' {
+        It 'buendelt die Datei-Ausgabe (ein UTF-8-Schreibvorgang je Puffer_leeren, kein Add-Content)' {
             $addContent = $ast.FindAll({
                 param($a) $a -is [System.Management.Automation.Language.CommandAst]
             }, $true) | Where-Object { $_.GetCommandName() -eq 'Add-Content' }
-            $addContent.Count | Should -Be 1
+            $addContent.Count | Should -Be 0                       # ersetzt durch .NET-UTF-8-Append
+            $txt = Get-Content -LiteralPath $skriptPfad -Raw
+            ([regex]::Matches($txt, 'AppendAllText\(\$path')).Count | Should -Be 1
         }
 
         It 'enthaelt keine schreibenden AD-Cmdlets (Read-only-Konvention)' {
@@ -381,14 +391,15 @@ Describe 'Analyse_V4_6.ps1' {
             }
         }
 
-        It 'ersetzt Umlaute durch ue/ae/oe (ASCII-Report)' {
+        It 'behaelt Umlaute im Text-Report (UTF-8, keine Transliteration mehr)' {
             neu_text 0 '-' 'Prüfung' 'Die Lösung wäre über kürzere Wörter möglich.'
             $inhalt = (Get-ReportZeilen) -join ' '
-            $inhalt | Should -Match 'Pruefung'
-            $inhalt | Should -Match 'Loesung'
-            $inhalt | Should -Match 'waere'
-            $inhalt | Should -Match 'moeglich'
-            $inhalt | Should -Not -Match '[üäöÜÄÖ]'
+            $inhalt | Should -Match 'Prüfung'
+            $inhalt | Should -Match 'Lösung'
+            $inhalt | Should -Match 'wäre'
+            $inhalt | Should -Match 'über'
+            $inhalt | Should -Match 'möglich'
+            $inhalt | Should -Not -Match 'ue/ae/oe|Loesung|waere|moeglich'
         }
     }
 
@@ -408,7 +419,7 @@ Describe 'Analyse_V4_6.ps1' {
             { Pruefbereich 'Testbereich' { throw 'Absichtlicher Testfehler' } } | Should -Not -Throw
             $zeilen = Get-ReportZeilen
             $inhalt = $zeilen -join ' '
-            $inhalt | Should -Match 'FEHLER - Bereich nur unvollstaendig geprueft'
+            $inhalt | Should -Match 'FEHLER - Bereich nur unvollständig geprüft'   # Umlaute (UTF-8)
             $inhalt | Should -Match 'Absichtlicher Testfehler'
             $inhalt | Should -Match 'fortgesetzt'
             foreach ($zeile in $zeilen) { $zeile.Length | Should -Be 90 }
@@ -719,7 +730,7 @@ Describe 'Analyse_V4_6.ps1' {
             { Unterpruefung 'Testpruefung' 'kerberoasting' { throw 'Simulierter Abfragefehler' } } |
                 Should -Not -Throw
             $txt = (Get-ReportZeilen) -join ' '
-            $txt | Should -Match 'Teilpruefung uebersprungen'
+            $txt | Should -Match 'Teilprüfung übersprungen'        # Umlaute (UTF-8)
             $txt | Should -Match 'Simulierter Abfragefehler'
         }
     }

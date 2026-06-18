@@ -123,6 +123,21 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Umlaut-Feinschliff Teil 1 „Encoding-Fundament" (Juni 2026):**
+- Text-Report jetzt **UTF-8 mit BOM** statt ASCII: Datei wird per
+  `[IO.File]::WriteAllText($path,'',UTF8(BOM))` angelegt, der gepufferte Inhalt per
+  `[IO.File]::AppendAllText($path,…,UTF8(ohne BOM))` angehängt (genau ein BOM am Dateianfang,
+  verifiziert auch nach mehreren Flushes). Ersetzt `Out-File -Encoding ascii` + `Add-Content`.
+- `neu_text` transliteriert **nicht mehr** (ü→ue etc. entfernt); Umlaute bleiben im Text-Report
+  erhalten. HTML/JSON bekamen über `Merken` ohnehin schon das Original. Damit zeigen u.a. die
+  Fehlermeldungen („Bereich nur unvollständig geprüft", „Teilprüfung übersprungen") jetzt echte
+  Umlaute.
+- Tests: `Get-ReportZeilen` liest UTF-8; betroffene Erwartungen auf Umlaute umgestellt; neuer
+  statischer Guard (kein `-Encoding ascii`/keine `neu_text`-Transliteration mehr, ein
+  `AppendAllText`). Suite **91 → 92**, grün PS 7 + 5.1. Round-trip separat unter PS 5.1 geprüft.
+- Teil 2 (die ~60 ASCII-transliterierten Alt-Labels/Bereichstitel de-transliterieren) folgt als
+  eigener PR.
+
 **Bugfix „dcdienste: Enter-PSSession → Invoke-Command" (Juni 2026):**
 - `dcdienste` (Dienst-Inventar je DC, DC-Detailmodus `DomCon=2`) nutzte `Enter-PSSession`/
   `Exit-PSSession` — im nicht-interaktiven Skript wirkungslos, die `Get-Service`/`Get-WmiObject`
