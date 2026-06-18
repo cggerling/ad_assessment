@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Pester-Tests (Pester 5) fuer die Formatierungs-/Layout-Funktionen von Analyse_V4_6.ps1.
+    Pester-Tests (Pester 5) fuer die Formatierungs-/Layout-Funktionen von AD-Analyse-V5.ps1.
 
 .DESCRIPTION
     Das Analyse-Skript wird bewusst NICHT ausgefuehrt (es wuerde sofort die AD-Pruefungen
@@ -16,17 +16,17 @@
     Ausfuehren:  Invoke-Pester -Path .\Tests -Output Detailed
 #>
 
-Describe 'Analyse_V4_6.ps1' {
+Describe 'AD-Analyse-V5.ps1' {
 
     BeforeAll {
-        $skriptPfad = Join-Path (Split-Path -Parent $PSScriptRoot) 'Analyse_V4_6.ps1'
+        $skriptPfad = Join-Path (Split-Path -Parent $PSScriptRoot) 'AD-Analyse-V5.ps1'
 
         ### Skript parsen (ohne Ausfuehrung) ########################################################
         $tokens = $null ; $parseFehler = $null
         $ast = [System.Management.Automation.Language.Parser]::ParseFile(
             $skriptPfad, [ref]$tokens, [ref]$parseFehler)
         if ($parseFehler.Count -gt 0) {
-            throw "Analyse_V4_6.ps1 laesst sich nicht parsen: $($parseFehler[0])"
+            throw "AD-Analyse-V5.ps1 laesst sich nicht parsen: $($parseFehler[0])"
         }
 
         ### Formatierungs-Funktionen extrahieren und global definieren #############################

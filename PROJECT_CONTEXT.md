@@ -118,18 +118,22 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 - ~~Performance: I/O bündeln (StringBuilder)~~ → *erledigt (PR „Performance").*
 - ~~Parametrisierung (Ausgabepfad, Zielbereiche)~~ → *erledigt (PR „Parametrisierung").*
 - ~~Pester-Tests für die Formatierungs-/Hilfsfunktionen~~ → *erledigt (PR „Fundament"):
-  `Tests/Analyse_V4_6.Format.Tests.ps1` (Pester 5, 25 Tests). Ausführen mit
+  `Tests/AD-Analyse-V5.Format.Tests.ps1` (Pester 5). Ausführen mit
   `Invoke-Pester -Path .\Tests`; läuft unter PowerShell 5.1 und 7.*
 
 ## 7. Aktueller Stand (Changelog)
 
+**Tests auf `AD-Analyse-V5.ps1` umgezogen (Juni 2026):**
+- Testdatei umbenannt `Tests/Analyse_V4_6.Format.Tests.ps1` -> `Tests/AD-Analyse-V5.Format.Tests.ps1`
+  (`git mv`) und der Ziel-Pfad (`$skriptPfad`) auf `AD-Analyse-V5.ps1` umgestellt. Die Suite prüft
+  damit die neue Arbeitsbasis (93 Tests grün, PS 7 + 5.1).
+- `Analyse_V4_6.ps1` bleibt als Archiv im Repo, wird aber **nicht mehr getestet**. Weiterentwicklung
+  erfolgt an `AD-Analyse-V5.ps1`.
+
 **Neue Datei `AD-Analyse-V5.ps1` als Arbeitsbasis (Juni 2026):**
 - Byte-genaue Kopie des aktuellen `Analyse_V4_6.ps1` (UTF-8 mit BOM) unter neuem Namen; nur die
-  vier `.EXAMPLE`-Selbstaufrufe auf `.\AD-Analyse-V5.ps1` umgestellt. Soll künftig die Grundlage
-  für weitere Anpassungen sein. `Analyse_V4_6.ps1` bleibt vorerst bestehen.
-- **Offen/zu entscheiden:** Die Pester-Tests (`Tests/Analyse_V4_6.Format.Tests.ps1`) zeigen weiter
-  auf die alte Datei. Für Weiterentwicklung an `AD-Analyse-V5.ps1` sollten die Tests darauf
-  umgezogen (oder dupliziert) und die alte Datei ggf. später entfernt werden.
+  vier `.EXAMPLE`-Selbstaufrufe auf `.\AD-Analyse-V5.ps1` umgestellt. Künftige Grundlage für
+  weitere Anpassungen. `Analyse_V4_6.ps1` bleibt vorerst bestehen.
 
 **Inhalt „Texte etwas weniger technisch" (Juni 2026):**
 - Auf Wunsch (Management/Audit-Lesbarkeit) die Begründungstexte (Zweck/Hintergrund) aller ~45
@@ -430,7 +434,7 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 - Modul-Vorabprüfung vor Anlage der Ausgabedatei: `ActiveDirectory` fehlt → klare Meldung +
   Abbruch (`exit 1`); `GroupPolicy`/`DnsServer` fehlen → Warnung + betroffener Schalter
   (`$allgpo` bzw. `$dnschk`) wird auf 0 gesetzt, der Lauf geht weiter.
-- Pester-5-Tests für die 13 Formatierungs-/Layout-Funktionen (`Tests/Analyse_V4_6.Format.Tests.ps1`).
+- Pester-5-Tests für die 13 Formatierungs-/Layout-Funktionen (`Tests/AD-Analyse-V5.Format.Tests.ps1`).
   Die Tests extrahieren die Funktionen per AST aus der Skriptdatei (das Skript wird dabei nicht
   ausgeführt) und prüfen das Datei-Layout zeichengenau; zusätzlich statische Prüfungen
   (parsebar, `#Requires` vorhanden, keine schreibenden AD-Cmdlets).
