@@ -23,7 +23,9 @@
     Breite der Report-Ausgabe in Zeichen, 70 bis 90 (Standard: 90).
 
 .PARAMETER KeineKonsole
-    Unterdrueckt die farbige Konsolenausgabe (nur Datei-Ausgabe).
+    Unterdrueckt die Konsolenausgabe komplett (auch die Fortschrittsanzeige). Standardmaessig
+    zeigt die Konsole nur den Fortschritt je Pruefung (laeuft/OK/FEHLER); der vollstaendige
+    Bericht steht in den Report-Dateien, Fehler im separaten Fehlerlog (<report>.Fehler.log).
 
 .PARAMETER KeineDatei
     Unterdrueckt die Datei-Ausgabe (nur Konsolenausgabe).
@@ -114,7 +116,9 @@ $F_Ue_Schrift = "Gray"                           # Farbe fuer Ueberschriften    
 $F_Text = "White"                                # Farbe fuer normalen Text                        #
 $F_Fehler = "Red"                                # Farbe fuer Fehlermeldungen                      #
 $A_Dat = 1                                       # Ausgabe auch in Datei? 1=Ja 0=Nein              #
-$A_Con = 1                                       # Ausgabe auch in Konsole? 1=Ja 0=Nein            #
+$A_Con = 0                                       # Voll-Report auch in Konsole? 0=nein (nur Fortschritt) #
+$A_Prog = 1                                      # Fortschrittsanzeige in der Konsole? 1=Ja 0=Nein #
+$Fehler_Anzahl = 0                               # Zaehler protokollierter Fehler (-> Fehlerlog)   #
 $A_Htm = 1                                       # Zusaetzlich HTML-Report? 1=Ja 0=Nein            #
 $A_Jsn = 1                                       # Zusaetzlich JSON-Export? 1=Ja 0=Nein            #
 ####################################################################################################
@@ -189,7 +193,7 @@ $deltchk = 1                                     # Delta-Bereich (Paket F)      
 # Parameter-Overrides anwenden (nur wenn beim Aufruf angegeben):                                   #
 ################################################################                                   #
 if ($PSBoundParameters.ContainsKey('Breite')) { $sb = $Breite }                                    #
-if ($KeineKonsole) { $A_Con = 0 }                # Konsolenausgabe per Parameter aus               #
+if ($KeineKonsole) { $A_Con = 0 ; $A_Prog = 0 }  # Konsole komplett aus (Report + Fortschritt)     #
 if ($KeineDatei)   { $A_Dat = 0 }                # Datei-Ausgabe per Parameter aus                 #
 if ($KeinHTML)     { $A_Htm = 0 }                # HTML-Report per Parameter aus                   #
 if ($KeinJSON)     { $A_Jsn = 0 }                # JSON-Export per Parameter aus                   #
@@ -1061,6 +1065,7 @@ function Phase ($titel) {
     # Wird im Text-Report als ===-Banner und im HTML-Report als Phasen-Ueberschrift dargestellt;
     # gruppiert zugleich die Executive Summary nach Phase.
     Merken 'Phase' @{ Titel = $titel }
+    if ($A_Prog -eq 1) { Write-Host '' ; Write-Host "=== $titel ===" -ForegroundColor Cyan }
     $voll = '=' * $sb
     $la   = '===' + $leer ; $re = $leer + '==='
     $pad  = $sb - $la.Length - $re.Length - "$titel".Length ; if ($pad -lt 0) { $pad = 0 }
@@ -1437,6 +1442,19 @@ function neu_text ($sub,$uze,[string]$ueb,[string]$text) {
 ####################################################################################################
 # Fehlerbehandlung: Kapselt einen Pruefbereich in try/catch                                        #
 ####################################################################################################
+function Schreibe-Fehler ($wo, $meldung) {
+    # Schreibt einen Fehler mit Zeitstempel in das separate Fehlerlog (<report>.Fehler.log) und
+    # zaehlt ihn mit. Der Lauf wird dadurch NICHT abgebrochen (der Aufrufer faengt die Exception ab).
+    $script:Fehler_Anzahl = 1 + [int]$script:Fehler_Anzahl
+    if ($A_Dat -ne 1) { return }
+    $logPfad = [System.IO.Path]::ChangeExtension($path, 'Fehler.log')
+    $zeile = "[{0}] [{1}] {2}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $wo, $meldung
+    if (-not (Test-Path -LiteralPath $logPfad)) {
+        $kopf = "Fehlerprotokoll - $maintitel - System $system - $datum" + [Environment]::NewLine + ('=' * 78) + [Environment]::NewLine
+        [System.IO.File]::WriteAllText($logPfad, $kopf, (New-Object System.Text.UTF8Encoding($true)))
+    }
+    [System.IO.File]::AppendAllText($logPfad, $zeile + [Environment]::NewLine, (New-Object System.Text.UTF8Encoding($false)))
+}
 function Pruefbereich ($titel,[scriptblock]$aktion,$CheckId) {
     ### Legende ####################################################################################
     # $titel   = Ueberschrift des Bereichs (wird an Bereich durchgereicht)                         #
@@ -1445,19 +1463,22 @@ function Pruefbereich ($titel,[scriptblock]$aktion,$CheckId) {
     # Ein Fehler im Bereich bricht den Lauf nicht ab: Er wird im Report vermerkt, auf der          #
     # Konsole rot gemeldet, und es geht mit dem naechsten Bereich weiter.                          #
     ################################################################################################
+    if ($A_Prog -eq 1) { Write-Host '' ; Write-Host "[*] $titel" -ForegroundColor $F_Ue_Schrift }
     Bereich $titel
     if ($CheckId) { Doku $CheckId }
-    try { & $aktion }
+    try {
+        & $aktion
+        if ($A_Prog -eq 1) { Write-Host "    erledigt" -ForegroundColor DarkGray }
+    }
     catch {
         $f_meldung = $_.Exception.Message
         $f_zeile = $_.InvocationInfo.ScriptLineNumber
         Leerzeile
-        neu_text 0 '!' "FEHLER - Bereich nur unvollständig geprüft" `
-            "Meldung: $f_meldung (Skriptzeile $f_zeile). Der Lauf wird mit dem nächsten Bereich fortgesetzt."
+        neu_text 0 '!' "FEHLER - Bereich nicht vollständig geprüft" `
+            "Ein Fehler wurde übersprungen; Details stehen im Fehlerlog. Der Lauf wird mit dem nächsten Bereich fortgesetzt."
         Leerzeile
-        if ($A_Con -eq 1) {
-            Write-Host "FEHLER im Bereich '$titel': $f_meldung" -ForegroundColor $F_Fehler
-        }
+        Schreibe-Fehler "Bereich: $titel" "$f_meldung (Skriptzeile $f_zeile)"
+        if ($A_Prog -eq 1) { Write-Host "    FEHLER - siehe Fehlerlog" -ForegroundColor $F_Fehler }
     }
     finally { Puffer_leeren }                    # Bereich fertig -> Puffer in die Datei schreiben #
 }
@@ -1469,13 +1490,19 @@ function Unterpruefung ($titel,$checkid,[scriptblock]$aktion) {
     # $aktion  = Scriptblock mit der eigentlichen Pruefung; eigener try/catch, damit ein           #
     #            Fehler nur diese Teilpruefung ueberspringt, nicht den ganzen Bereich.             #
     ################################################################################################
+    if ($A_Prog -eq 1) { Write-Host ("    - {0} ... " -f $titel) -NoNewline -ForegroundColor $F_Text }
     Bereichstitel $titel
     if ($checkid) { Doku $checkid }
     Leerzeile
-    try { & $aktion }
+    try {
+        & $aktion
+        if ($A_Prog -eq 1) { Write-Host "OK" -ForegroundColor Green }
+    }
     catch {
         neu_text 0 '!' "Hinweis: Teilprüfung übersprungen" `
-            "Meldung: $($_.Exception.Message). Die übrigen Prüfungen dieses Bereichs laufen weiter."
+            "Diese Teilprüfung wurde wegen eines Fehlers übersprungen (Details im Fehlerlog); die übrigen Prüfungen dieses Bereichs laufen weiter."
+        Schreibe-Fehler "Teilprüfung: $titel" "$($_.Exception.Message)"
+        if ($A_Prog -eq 1) { Write-Host "FEHLER - siehe Fehlerlog" -ForegroundColor $F_Fehler }
     }
     Leerzeile
 }
@@ -1682,7 +1709,7 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
     [void]$H.AppendLine('</html>')
     # Mit BOM schreiben, damit Umlaute auch ausserhalb des Browsers (Editoren, PS 5.1) stimmen.
     [System.IO.File]::WriteAllText($ziel, $H.ToString(), (New-Object System.Text.UTF8Encoding($true)))
-    if ($A_Con -eq 1) { Write-Host "HTML-Report : $ziel" -ForegroundColor $F_Ue_Schrift }
+    if ($A_Prog -eq 1) { Write-Host "HTML-Report : $ziel" -ForegroundColor $F_Ue_Schrift }
 }
 function JSON_Export {
     # Schreibt die gesammelten Ereignisse als strukturierte JSON-Datei (fuer Auswertungen,
@@ -1699,7 +1726,7 @@ function JSON_Export {
     }
     $json = $export | ConvertTo-Json -Depth 6
     [System.IO.File]::WriteAllText($ziel, $json, (New-Object System.Text.UTF8Encoding($false)))
-    if ($A_Con -eq 1) { Write-Host "JSON-Export : $ziel" -ForegroundColor $F_Ue_Schrift }
+    if ($A_Prog -eq 1) { Write-Host "JSON-Export : $ziel" -ForegroundColor $F_Ue_Schrift }
 }
 ####################################################################################################
 # Funktionen zum Auslesen                                                                          #
@@ -4709,6 +4736,7 @@ function chk_delta ($altPfad) {
 Clear-Host
 Header $type $maintitel
 Puffer_leeren
+if ($A_Prog -eq 1) { Write-Host "AD-Analyse V5  -  System $system  -  $datum" -ForegroundColor Cyan }
 ####################################################################################################
 ## PHASE 1 - Reconnaissance (Bestandsaufnahme / Enumeration)                                      ##
 ####################################################################################################
@@ -4965,6 +4993,15 @@ Puffer_leeren
 ####################################################################################################
 if ($A_Htm -eq 1) { HTML_Report }
 if ($A_Jsn -eq 1) { JSON_Export }
+if ($A_Prog -eq 1) {
+    Write-Host ''
+    Write-Host "Fertig. Report-Verzeichnis: $sysverz" -ForegroundColor Cyan
+    if ($Fehler_Anzahl -gt 0) {
+        Write-Host "$Fehler_Anzahl Fehler protokolliert -> $([System.IO.Path]::ChangeExtension($path,'Fehler.log'))" -ForegroundColor $F_Fehler
+    } else {
+        Write-Host 'Keine Fehler aufgetreten.' -ForegroundColor Green
+    }
+}
 ####################################################################################################
 ## Ende                                                                                           ##
 ####################################################################################################

@@ -123,6 +123,19 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Konsole = Fortschritt + separates Fehlerlog (Juni 2026, AD-Analyse-V5.ps1):**
+- Während des Laufs zeigt die Konsole nur noch den **Fortschritt** statt des vollen Berichts:
+  `=== PHASE … ===`, `[*] <Bereich>`, `    - <Test> … OK` bzw. `… FEHLER - siehe Fehlerlog`,
+  `    erledigt` je Bereich, am Ende eine Zusammenfassung. Neue Schalter `$A_Prog` (Fortschritt,
+  Default 1) und `$A_Con` jetzt Default **0** (Voll-Report nur noch in den Dateien). `-KeineKonsole`
+  schaltet beides ab.
+- Fehler werden **nicht mehr inline** in den Report geschrieben, sondern mit Zeitstempel in ein
+  **separates Fehlerlog** `<report>.Fehler.log` (neue Funktion `Schreibe-Fehler`); im Report bleibt
+  je betroffener Prüfung nur ein kurzer Hinweis („… nicht vollständig geprüft / übersprungen –
+  siehe Fehlerlog"). Der Lauf macht mit den weiteren Prüfungen weiter (Verhalten bestätigt).
+- Tests **96 → 98** (Fehler→Log statt inline, Schreibe-Fehler-Format, Konsolen-Defaults), grün
+  PS 7 + 5.1; Fortschritts-UX zusätzlich per Mini-Lauf demonstriert.
+
 **Zwei-Phasen-Struktur: Reconnaissance vs. Schwachstellen (Juni 2026, AD-Analyse-V5.ps1):**
 - Report ist jetzt klar in zwei Phasen gegliedert statt gemischt: **Phase 1 - Reconnaissance**
   (reine Enumeration/Bestand: Domain/FSMO, Central Store, DCs, Trusts, DNS, SYSVOL-Health,
