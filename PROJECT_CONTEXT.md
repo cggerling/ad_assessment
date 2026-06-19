@@ -123,6 +123,18 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Central Store entschlackt + Kritikalität entfernt (Juni 2026, AD-Analyse-V5.ps1):**
+- **„Central Store & Templates" → „Central Store":** Der Teilbereich „Check der Sec. Templates"
+  (Funktion `sec_templates`, Schalter `$sectem`) wurde komplett entfernt (Ablauf, Funktion,
+  Config, Override-Whitelist, Katalog-Beschreibung, .SYNOPSIS). Der Bereich zeigt nur noch den
+  Central-Store-Check.
+- **Kritikalität/Severity aus dem HTML-Report entfernt** (auf Nutzerwunsch, da als „Wichtigkeit
+  des Prüfbereichs" missverständlich): keine Severity-Badges an Überschriften mehr, keine
+  Schwere-Zählung und keine Badges in der Zusammenfassung (jetzt reine, nach Phasen gegliederte
+  Linkliste), `SevKlasse`/Badge-/sev-CSS entfernt. Das Feld `Schwere` bleibt als reines
+  **Datenfeld im JSON-Export/Katalog** erhalten (nicht sichtbar im HTML).
+- Tests **98 → 99** (Badge-Negativprüfung im HTML, Central-Store-Entfernung), grün PS 7 + 5.1.
+
 **Konsole = Fortschritt + separates Fehlerlog (Juni 2026, AD-Analyse-V5.ps1):**
 - Während des Laufs zeigt die Konsole nur noch den **Fortschritt** statt des vollen Berichts:
   `=== PHASE … ===`, `[*] <Bereich>`, `    - <Test> … OK` bzw. `… FEHLER - siehe Fehlerlog`,
