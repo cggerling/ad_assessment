@@ -123,6 +123,13 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Kerberoasting: Beispiel + Hintergrund überarbeitet (Juni 2026, AD-Analyse-V5.ps1):**
+- Beispiel von „Jeder Domänenbenutzer …" auf ein **konkretes Angriffsszenario** umgestellt
+  (übernommenes Mitarbeiterkonto → gezielt Service-Ticket von `svc-sql` → über Nacht geknackt →
+  `svc-sql` ist Domain Admin → Domänenübernahme). Technischer Hintergrund **ausführlicher**
+  (SPN/Dienstkonto, Service-Ticket-Anforderung als Normalverhalten, aus dem Passwort abgeleiteter
+  Schlüssel, Offline-Cracking ohne Sperrung/Alarm) - Tonalität unverändert. Tests 104, grün PS 7 + 5.1.
+
 **OU-Aufteilung hierarchisch/iterativ (Juni 2026, AD-Analyse-V5.ps1):**
 - Die „Aufteilung OU zu User, Systemen, AD-Gruppen und gMSA" zeigt die OUs jetzt **eingerückt nach
   Tiefe** statt flach alphabetisch. Da bereits nach `CanonicalName` (Pre-Order: Eltern vor Kindern)
