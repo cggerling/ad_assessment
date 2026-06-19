@@ -123,6 +123,16 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**DC-Detailprüfung: NTLM-Klartext + BitLocker als eigener Bereich (Juni 2026, AD-Analyse-V5.ps1):**
+- **NTLM Einstellungen**: zeigt jetzt den geprüften **Registry-Pfad** (`HKLM:\SYSTEM\CurrentControlSet\
+  Control\Lsa`) und **Wertname** (`LmCompatibilityLevel`) sowie den **tatsächlichen Wert** mit Klartext-
+  Erklärung. Ist der Wert nicht gesetzt, steht jetzt „nicht gesetzt (Windows-Standard, faktisch Stufe 3)"
+  statt des verwirrenden „Fehler".
+- **BitLocker Feature** nutzt jetzt `Bereichstitel` (eigene Sektion) statt `Subtitel` und erscheint
+  dadurch nicht mehr fälschlich unter „Voraussetzungen für LDAPS".
+- Tests **102 → 103** (statischer Guard für Registry-Pfad/Wertname, kein „Fehler"-Wert, BitLocker
+  eigener Bereich), grün PS 7 + 5.1.
+
 **OS-Lifecycle: aktuelle EoL-Daten + Windows Server 2025 (Juni 2026, AD-Analyse-V5.ps1):**
 - **Server Check** erkennt jetzt **Windows Server 2025** (Zusammenfassung + Liste).
 - **EoL-Markierung date-driven:** neue Funktion `EoL-Farbe` bestimmt die Farbe aus dem Vergleich

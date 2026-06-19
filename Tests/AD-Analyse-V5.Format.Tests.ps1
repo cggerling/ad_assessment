@@ -138,6 +138,14 @@ Describe 'AD-Analyse-V5.ps1' {
             $global:CheckKatalog['central_store'].Titel | Should -Be 'Central Store'
         }
 
+        It 'NTLM-Check nennt Registry-Pfad/Wertname und zeigt keinen "Fehler"-Wert; BitLocker eigener Bereich' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Match 'Registry-Pfad'
+            $inhalt | Should -Match 'LmCompatibilityLevel'
+            $inhalt | Should -Not -Match '\$wert = "Fehler"'
+            $inhalt | Should -Match 'Bereichstitel "BitLocker Feature:" "s"'
+        }
+
         It 'ist als UTF-8 mit BOM gespeichert (korrekte Umlaute auch unter PS 5.1)' {
             $bytes = [System.IO.File]::ReadAllBytes($skriptPfad)
             $bytes[0] | Should -Be 0xEF

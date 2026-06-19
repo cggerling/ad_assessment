@@ -4024,44 +4024,38 @@ function dc_ldaps ($dc){
     Leerzeile
 }
 function NTLM ($dcakt){
-    $regkey = Invoke-Command -ComputerName $dcakt -ScriptBlock `
-    { 
-        Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\' `
-         -ErrorAction SilentlyContinue
+    $pfad = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
+    $wert = Invoke-Command -ComputerName $dcakt -ScriptBlock {
+        (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' `
+            -Name LmCompatibilityLevel -ErrorAction SilentlyContinue).LmCompatibilityLevel
     }
-    if($null -eq $regkey) { 
-        $aktiv = "Reg-Key nicht vorhanden" ; $fa = "Red"
-        } 
-        else { 
-            $aktiv = "Reg-Key vorhanden" ; $fa = "Green" 
-            $wert = $regkey.lmcompatibilitylevel
-            switch ($wert) {
-                "0" { $fa2 = "Red" }
-                "1" { $fa2 = "Red" }
-                "2" { $fa2 = "Red" }
-                "3" { $fa2 = "Red" }
-                "4" { $fa2 = "Yellow" }
-                "5" { $fa2 = "Green" }
-                Default { $wert = "Fehler" ; $fa2 = "Red" }
-            }
+    if ($null -eq $wert -or "$wert" -eq "") {
+        $wert_txt = "nicht gesetzt (Windows-Standard, faktisch Stufe 3)" ; $fa2 = "Yellow"
+    } else {
+        switch ("$wert") {
+            "0" { $wert_txt = "0 - LM- und NTLM-Antworten senden"                ; $fa2 = "Red" }
+            "1" { $wert_txt = "1 - LM & NTLM (NTLMv2 nur wenn ausgehandelt)"      ; $fa2 = "Red" }
+            "2" { $wert_txt = "2 - nur NTLM-Antworten senden"                     ; $fa2 = "Red" }
+            "3" { $wert_txt = "3 - nur NTLMv2 senden; DC akzeptiert noch LM/NTLM" ; $fa2 = "Red" }
+            "4" { $wert_txt = "4 - nur NTLMv2; DC verweigert LM"                  ; $fa2 = "Yellow" }
+            "5" { $wert_txt = "5 - nur NTLMv2; DC verweigert LM & NTLM"           ; $fa2 = "Green" }
+            default { $wert_txt = "$wert (unbekannter Wert)"                      ; $fa2 = "Red" }
         }
-    Bereichstitel "NTLM Einstellungen:" "s"
+    }
+    Bereichstitel "NTLM Einstellungen (LmCompatibilityLevel):" "s"
     Leerzeile
-    2werte "Reg-Key vorhanden:" $aktiv "s" $fa
+    2werte "Registry-Pfad :" "$pfad" "s"
+    2werte "Wertname      :" "LmCompatibilityLevel" "s"
+    2werte "Gesetzter Wert:" $wert_txt "s" $fa2
     Leerzeile
-    2werte "Gesetzter Wert   :" $wert "s" $fa2
-    Leerzeile
-    2werte "Legende" "" "s"
+    2werte "Legende (LmCompatibilityLevel):" "" "s"
     Leerzeile
     2werte " 0 =" "LM- und NTLM-Antworten senden" "s" "Red"
-    2werte " 1 =" "LM- und NTLM-Antworten senden" "s" "Red"
-    2werte "    " "(NTLMv2-Sitzungssicherheit verwenden)" "s" "Red"
+    2werte " 1 =" "LM & NTLM (NTLMv2 nur wenn ausgehandelt)" "s" "Red"
     2werte " 2 =" "Nur NTLM-Antworten senden" "s" "Red"
-    2werte " 3 =" "Nur NTLMv2 Antworten senden" "s" "Red"
-    2werte " 4 =" "Nur NTLMv2 Antworten senden" "s" "Yellow"
-    2werte "    " "LM verweigern" "s" "Yellow"
-    2werte " 5 =" "Nur NTLMv2 Antworten senden" "s" "Green"
-    2werte "    " "LM & NTLM verweigern" "s" "Green"
+    2werte " 3 =" "Nur NTLMv2 senden; DC akzeptiert noch LM/NTLM" "s" "Red"
+    2werte " 4 =" "Nur NTLMv2; DC verweigert LM" "s" "Yellow"
+    2werte " 5 =" "Nur NTLMv2; DC verweigert LM & NTLM" "s" "Green"
     Leerzeile
 }
 function dc_SMB1 ($DC) {
@@ -4113,7 +4107,7 @@ function OF_Bitlocker ($DC) {
         $ofbtp = Get-WindowsOptionalFeature -Online | Where-Object {$_.FeatureName -like "*BitLo*"}
         return $ofbtp
     }
-    Subtitel "BitLocker Feature:" "1" "*"
+    Bereichstitel "BitLocker Feature:" "s"
     Leerzeile
     $laenge = 0
     foreach ($of in $ofb) {
