@@ -3673,8 +3673,14 @@ function OUS {
         $Name = Split-Path $OU.CanonicalName -Leaf
         $ou_path = (Get-ADObject -Identity $ou -Properties * | Select-Object CanonicalName).CanonicalName
         $ou_path = $ou_path.Replace("$dom_root/","~/").Replace("$Name","")
-        if ($OrgUni -eq '2') { $ou_name = ("$Name").PadRight($len) + " - $ou_path" } 
-            else { $ou_name = "$Name" }
+        # Hierarchische Einrueckung: Tiefe = Anzahl uebergeordneter OUs (CanonicalName-Ebenen ohne
+        # Domain und ohne eigenen Namen). Da nach CanonicalName sortiert wird, steht jede Eltern-OU
+        # vor ihren Kind-OUs (Pre-Order); der Einzug macht die OU-Struktur iterativ sichtbar.
+        $tiefe = $OU.CanonicalName.Split('/').Count - 2
+        if ($tiefe -lt 0) { $tiefe = 0 }
+        $einzug = '  ' * $tiefe
+        if ($OrgUni -eq '2') { $ou_name = ($einzug + $Name).PadRight($len + 8) + " - $ou_path" }
+            else { $ou_name = $einzug + $Name }
         $User = (Get-AdUser -Filter * -SearchBase $OU.DistinguishedName -SearchScope OneLevel).Count
         if($User -eq 0) { $User1 = "0" } elseif($User -ge 1) {$User1 = $User} else { $User1 = "1" }
         $Sys = (Get-AdComputer -Filter * -SearchBase $OU.DistinguishedName -SearchScope OneLevel).Count
