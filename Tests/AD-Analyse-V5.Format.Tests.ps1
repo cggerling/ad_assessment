@@ -34,7 +34,7 @@ Describe 'AD-Analyse-V5.ps1' {
                             'Bereich','Phase','Bereichstitel','Subtitel','2werte','new_2werte',
                             'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                             'Ausgabe','Puffer_leeren','Entschluessle-GPP',
-                            'Merken','Doku','Schreibe-Fehler','Farbklasse','HTML_Report','JSON_Export',
+                            'Merken','Doku','Schreibe-Fehler','EoL-Farbe','Farbklasse','HTML_Report','JSON_Export',
                             'Extrahiere-Befunde','chk_delta')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
@@ -95,7 +95,7 @@ Describe 'AD-Analyse-V5.ps1' {
                          'Bereich','Phase','Bereichstitel','Subtitel','2werte','new_2werte',
                          'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                          'Ausgabe','Puffer_leeren','Entschluessle-GPP',
-                         'Merken','Doku','Schreibe-Fehler','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen',
+                         'Merken','Doku','Schreibe-Fehler','EoL-Farbe','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen',
                          'Extrahiere-Befunde','chk_delta')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
@@ -1059,6 +1059,30 @@ Describe 'AD-Analyse-V5.ps1' {
             $log | Should -Match '\[Bereich: Test\] etwas ist schiefgelaufen'
             $log | Should -Match '\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]'   # Zeitstempel
             Remove-Item $logPfad -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'OS-Lifecycle (EoL-Farbe / Server 2025)' {
+
+        It 'EoL-Farbe markiert vergangene EoL-Daten rot und kuenftige gruen' {
+            EoL-Farbe '01.01.2020'  | Should -Be 'Red'
+            EoL-Farbe '01.01.2099'  | Should -Be 'Green'
+            EoL-Farbe '14.10.2025'  | Should -Be 'Red'    # Windows 10/11 22H2 ist EoL
+            EoL-Farbe '14.11.2034'  | Should -Be 'Green'  # Windows Server 2025 (Extended)
+            EoL-Farbe 'End of Life' | Should -Be 'Red'
+            EoL-Farbe 'aktuell'     | Should -Be 'Green'
+        }
+
+        It 'Server-Check erkennt Windows Server 2025' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Match "operatingsystem -like 'windows server 2025"
+            $inhalt | Should -Match 'Windows Server 2025    :'
+        }
+
+        It 'Client-/Server-EoL wird per EoL-Farbe (Datum vs. heute) bestimmt, nicht fest gesetzt' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Match '\$EoS_1_fa = EoL-Farbe'
+            $inhalt | Should -Match 'EoL-Farbe \$grp\.EoS'
         }
     }
 

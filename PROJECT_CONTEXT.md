@@ -123,6 +123,18 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**OS-Lifecycle: aktuelle EoL-Daten + Windows Server 2025 (Juni 2026, AD-Analyse-V5.ps1):**
+- **Server Check** erkennt jetzt **Windows Server 2025** (Zusammenfassung + Liste).
+- **EoL-Markierung date-driven:** neue Funktion `EoL-Farbe` bestimmt die Farbe aus dem Vergleich
+  EoL-Datum vs. heute (statt fest hinterlegter Farbe). Damit werden abgelaufene Systeme automatisch
+  rot - u. a. Windows 10 21H2/22H2 und Windows 11 21H2/22H2 (vorher fälschlich grün).
+- **EoL-Daten auf Microsoft-Lifecycle-Stand** gebracht: Win10 21H2 = 11.06.2024, 22H2 = 14.10.2025;
+  Win11 21H2 = 08.10.2024, 22H2 = 14.10.2025, 23H2 = 10.11.2026, 24H2 = 12.10.2027, 25H2 = 10.10.2028;
+  Server 2016 = 12.01.2027, 2019 = 09.01.2029, 2022 = 14.10.2031, 2025 = 14.11.2034 (Extended).
+- In der „veraltete Systeme"-Ansicht (Modus 1) erscheinen Versionen automatisch, sobald ihr EoL-Datum
+  erreicht ist; in Modus 2 alle. Quelle: Microsoft Learn Lifecycle (live geprüft).
+- Tests **99 → 102** (EoL-Farbe-Unit-Test, Server-2025-Erkennung), grün PS 7 + 5.1.
+
 **Central Store entschlackt + Kritikalität entfernt (Juni 2026, AD-Analyse-V5.ps1):**
 - **„Central Store & Templates" → „Central Store":** Der Teilbereich „Check der Sec. Templates"
   (Funktion `sec_templates`, Schalter `$sectem`) wurde komplett entfernt (Ablauf, Funktion,
