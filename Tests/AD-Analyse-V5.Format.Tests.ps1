@@ -138,12 +138,26 @@ Describe 'AD-Analyse-V5.ps1' {
             $global:CheckKatalog['central_store'].Titel | Should -Be 'Central Store'
         }
 
-        It 'NTLM-Check nennt Registry-Pfad/Wertname und zeigt keinen "Fehler"-Wert; BitLocker eigener Bereich' {
+        It 'NTLM-Check nennt Registry-Pfad/Wertname und zeigt keinen "Fehler"-Wert' {
             $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
             $inhalt | Should -Match 'Registry-Pfad'
             $inhalt | Should -Match 'LmCompatibilityLevel'
             $inhalt | Should -Not -Match '\$wert = "Fehler"'
-            $inhalt | Should -Match 'Bereichstitel "BitLocker Feature:" "s"'
+        }
+
+        It 'DC-Detailpruefungen sind check-major: je Pruefung eigene Unterpruefung mit Katalog-Hintergrund' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            foreach ($id in 'dc_power','dc_smb','dc_ntlm','dc_ldaps','dc_bitlocker') {
+                $inhalt | Should -Match ("Unterpruefung[^\r\n]+'" + $id + "'")   # eigene Teilpruefung
+                $global:CheckKatalog.ContainsKey($id) | Should -BeTrue            # Katalogeintrag vorhanden
+                $global:CheckKatalog[$id].Hintergrund | Should -Not -BeNullOrEmpty
+                $global:CheckKatalog[$id].Empfehlung  | Should -Not -BeNullOrEmpty
+            }
+            # alte DC-eigene Bereichstitel der fuenf Checks sind entfernt (Titel kommt jetzt aus Unterpruefung)
+            $inhalt | Should -Not -Match 'Bereichstitel "BitLocker Feature:" "s"'
+            $inhalt | Should -Not -Match 'Bereichstitel "NTLM Einstellungen'
+            # BitLocker-Doku stellt klar: DC-eigene Laufwerksverschluesselung, nicht AD-Key-Escrow
+            $global:CheckKatalog['dc_bitlocker'].Zweck | Should -Match 'NICHT um die AD-Bereitstellung'
         }
 
         It 'OU-Aufteilung als Baum: rekursiv aus AD-Hierarchie, Geschwister nach Name, Box-Zeichen' {

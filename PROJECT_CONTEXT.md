@@ -123,6 +123,21 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**Domain Controller (Detailprüfung): pro Prüfung Hintergrund & Empfehlung + BitLocker geklärt (Juni 2026, AD-Analyse-V5.ps1):**
+- Der Bereich ist jetzt **check-major** strukturiert: jede der fünf DC-Detailprüfungen
+  (PowerShell-Ausführungsrichtlinie, SMB1/SMB2, NTLM-Stufe, LDAPS-Verfügbarkeit, BitLocker-Feature)
+  ist eine eigene `Unterpruefung` mit eigenem Katalog-Eintrag und damit einem einklappbaren
+  **„Hintergrund & Empfehlung"-Block** (gleiches Format/Tonalität/Tiefe wie die übrigen Checks).
+  Jede Prüfung iteriert intern über alle DCs (Unter-Überschrift „Domain Controller: <DC>").
+- **BitLocker geklärt:** Die Prüfung betrifft das **BitLocker-Windows-Feature auf dem DC selbst**
+  (Laufwerksverschlüsselung, schützt NTDS.dit bei Diebstahl/Backup) — **nicht** die AD-Bereitstellung
+  zum Hinterlegen von Wiederherstellungsschlüsseln im Verzeichnis. Zweck/Hintergrund sagen das explizit.
+- Fünf neue Katalog-Einträge (`dc_power`, `dc_smb`, `dc_ntlm`, `dc_ldaps`, `dc_bitlocker`) mit je einer
+  live verifizierten Microsoft-Learn-Quelle. Die fünf bisherigen DC-eigenen `Bereichstitel` der Checks
+  entfielen (Titel kommt jetzt aus der Unterpruefung). Detailmodus-Inventar (`-Bereiche @{DomCon=2}`:
+  Rollen/Features/Hotfixes/Programme/Dienste) bleibt als reine Auflistung je DC.
+- Tests **105 → 106**, grün PS 7 + 5.1.
+
 **OU-Aufteilung als echter Baum (Juni 2026, AD-Analyse-V5.ps1):**
 - Neue Funktion `OU_Sammle` durchläuft die **tatsächliche AD-OU-Hierarchie rekursiv** (Pre-Order,
   Geschwister nach Name wie in den AD-Werkzeugen) statt einer flachen, nach CanonicalName sortierten
