@@ -34,7 +34,7 @@ Describe 'AD-Analyse-V5.ps1' {
                             'Bereich','Phase','Bereichstitel','Subtitel','2werte','new_2werte',
                             'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                             'Ausgabe','Puffer_leeren','Entschluessle-GPP',
-                            'Merken','Doku','Schreibe-Fehler','EoL-Farbe','Farbklasse','HTML_Report','JSON_Export',
+                            'Merken','Doku','Schreibe-Fehler','EoL-Farbe','OU_Sammle','Farbklasse','HTML_Report','JSON_Export',
                             'Extrahiere-Befunde','chk_delta')
         $gefunden = $ast.FindAll({
             param($a) $a -is [System.Management.Automation.Language.FunctionDefinitionAst]
@@ -95,7 +95,7 @@ Describe 'AD-Analyse-V5.ps1' {
                          'Bereich','Phase','Bereichstitel','Subtitel','2werte','new_2werte',
                          'neu_tab_max6w_fb','neu_text','Pruefbereich','Unterpruefung',
                          'Ausgabe','Puffer_leeren','Entschluessle-GPP',
-                         'Merken','Doku','Schreibe-Fehler','EoL-Farbe','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen',
+                         'Merken','Doku','Schreibe-Fehler','EoL-Farbe','OU_Sammle','Farbklasse','HTML_Report','JSON_Export','Get-ReportZeilen',
                          'Extrahiere-Befunde','chk_delta')) {
             Remove-Item -LiteralPath "function:global:$n" -Force -ErrorAction SilentlyContinue
         }
@@ -146,10 +146,37 @@ Describe 'AD-Analyse-V5.ps1' {
             $inhalt | Should -Match 'Bereichstitel "BitLocker Feature:" "s"'
         }
 
-        It 'OU-Aufteilung wird hierarchisch eingerueckt (Tiefe aus CanonicalName)' {
+        It 'OU-Aufteilung als Baum: rekursiv aus AD-Hierarchie, Geschwister nach Name, Box-Zeichen' {
             $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
-            $inhalt | Should -Match '\$tiefe = \$OU\.CanonicalName\.Split'
-            $inhalt | Should -Match "\`$einzug = '  ' \* \`$tiefe"
+            $inhalt | Should -Match 'function OU_Sammle'
+            $inhalt | Should -Match 'OU_Sammle \$dist'
+            $inhalt | Should -Match 'SearchScope OneLevel \| Sort-Object Name'
+            $inhalt | Should -Match '0x251C'   # Box-Zeichen-Verbinder fuer den OU-Baum
+        }
+
+        It 'OU_Sammle baut die Hierarchie als Pre-Order-Baum mit Verbindern (mit Mock-AD)' {
+            $script:OUH = @{
+                'DC=t,DC=c'            = @(@{N='Alpha';D='OU=Alpha,DC=t,DC=c'}, @{N='Beta';D='OU=Beta,DC=t,DC=c'})
+                'OU=Alpha,DC=t,DC=c'   = @(@{N='Kind1';D='OU=Kind1,OU=Alpha,DC=t,DC=c'})
+            }
+            function global:Get-ADOrganizationalUnit { param($Filter,$SearchBase,$SearchScope)
+                $k = $script:OUH[$SearchBase]
+                if ($k) { $k | ForEach-Object { [pscustomobject]@{ Name=$_.N; DistinguishedName=$_.D } } } }
+            function global:Get-ADUser { @() } ; function global:Get-ADComputer { @() }
+            function global:Get-ADGroup { @() } ; function global:Get-ADServiceAccount { @() }
+            try {
+                $baum = @(OU_Sammle 'DC=t,DC=c' '')
+                $zeilen = $baum | ForEach-Object { $_.Anzeige }
+                $zeilen.Count | Should -Be 3                              # Alpha, Kind1, Beta
+                $zeilen[0] | Should -Match 'Alpha$'                       # erste Top-OU
+                $zeilen[1] | Should -Match 'Kind1$'                       # Kind direkt nach Elternteil (Pre-Order)
+                $zeilen[1] | Should -Match ([char]0x2514)                 # Kind ist letztes -> └
+                $zeilen[2] | Should -Match ('^' + [char]0x2514)           # Beta ist letzte Top-OU -> └
+            } finally {
+                Remove-Item function:global:Get-ADOrganizationalUnit, function:global:Get-ADUser, `
+                    function:global:Get-ADComputer, function:global:Get-ADGroup, function:global:Get-ADServiceAccount `
+                    -Force -ErrorAction SilentlyContinue
+            }
         }
 
         It 'ist als UTF-8 mit BOM gespeichert (korrekte Umlaute auch unter PS 5.1)' {

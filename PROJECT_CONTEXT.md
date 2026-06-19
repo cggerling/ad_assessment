@@ -123,6 +123,16 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**OU-Aufteilung als echter Baum (Juni 2026, AD-Analyse-V5.ps1):**
+- Neue Funktion `OU_Sammle` durchläuft die **tatsächliche AD-OU-Hierarchie rekursiv** (Pre-Order,
+  Geschwister nach Name wie in den AD-Werkzeugen) statt einer flachen, nach CanonicalName sortierten
+  Liste. Die Ausgabe ist ein **Baum mit Box-Verbindern** (├── └── │), z. B.:
+  `├── Contoso GmbH` / `│   ├── Benutzer` / `│   ├── Computer` / `│   │   └── Server` / `│   └── Gruppen` / `└── Daten`.
+  Zähler-Spalten werden an die längste Baumzeile angeglichen. (Box-Zeichen aus Char-Codes,
+  funktioniert in Text- und HTML-Report.)
+- Tests **104 → 105** (Struktur-Guard + funktionaler Pre-Order-Baum-Test mit gemocktem AD),
+  grün PS 7 + 5.1.
+
 **Kerberoasting: Beispiel + Hintergrund überarbeitet (Juni 2026, AD-Analyse-V5.ps1):**
 - Beispiel von „Jeder Domänenbenutzer …" auf ein **konkretes Angriffsszenario** umgestellt
   (übernommenes Mitarbeiterkonto → gezielt Service-Ticket von `svc-sql` → über Nacht geknackt →

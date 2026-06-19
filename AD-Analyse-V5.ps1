@@ -3555,6 +3555,30 @@ function spezial_user {
 ####################################################################################################
 # Funktionen fuer den Bereich "Organisation Units"                                                 #
 ####################################################################################################
+function OU_Sammle ($parentDN, $praefix) {
+    # Rekursiver Pre-Order-Durchlauf der OU-Hierarchie ab $parentDN; Geschwister nach Name (wie in
+    # den AD-Verwaltungswerkzeugen). Emittiert je OU ein Objekt mit Baum-Praefix (Box-Zeichen) und
+    # den Objekt-Zaehlern. Der Praefix bildet die tatsaechliche AD-Struktur als Baum ab.
+    $aeste = [char]0x251C + [char]0x2500 + [char]0x2500 + ' '   # ├──
+    $ende  = [char]0x2514 + [char]0x2500 + [char]0x2500 + ' '   # └──
+    $fort  = [char]0x2502 + '   '                               # │
+    $kinder = @(Get-ADOrganizationalUnit -Filter * -SearchBase $parentDN -SearchScope OneLevel | Sort-Object Name)
+    for ($i = 0; $i -lt $kinder.Count; $i++) {
+        $k = $kinder[$i]
+        $letzte = ($i -eq $kinder.Count - 1)
+        $verbinder = if ($letzte) { $ende } else { $aeste }
+        [pscustomobject]@{
+            Anzeige = $praefix + $verbinder + $k.Name
+            User    = @(Get-ADUser              -Filter * -SearchBase $k.DistinguishedName -SearchScope OneLevel).Count
+            Sys     = @(Get-ADComputer          -Filter * -SearchBase $k.DistinguishedName -SearchScope OneLevel).Count
+            ADG     = @(Get-ADGroup             -Filter * -SearchBase $k.DistinguishedName -SearchScope OneLevel).Count
+            gMSA    = @(Get-ADServiceAccount     -Filter * -SearchBase $k.DistinguishedName -SearchScope OneLevel).Count
+            SubOU   = @(Get-ADOrganizationalUnit -Filter * -SearchBase $k.DistinguishedName -SearchScope OneLevel).Count
+        }
+        $kindPraefix = $praefix + $(if ($letzte) { '    ' } else { $fort })
+        OU_Sammle $k.DistinguishedName $kindPraefix
+    }
+}
 function OUS {
     ### Legende ####################################################################################
     # neu_tab_max6w_fb ([int]$spa,$pos,$sub,[int]$bre,$txt,$we1,$we2,$we3,$we4,$we5,$we6)          #
@@ -3666,38 +3690,14 @@ function OUS {
     neu_tab_max6w_fb "5" "l" "s" "4" $N4 $u41 $s41 $AD41 $gMS41 $o_u41
     tablinie "s"
     ### other Organisation Units ###################################################################
-    $OUs = Get-ADOrganizationalUnit -Properties CanonicalName -Filter * | Sort-Object CanonicalName
-    $OUlength = (Get-ADOrganizationalUnit -Properties Name -Filter * | Sort-Object Name).Name
-    $len = 0 ; foreach ($oul in $OUlength) { if ($oul.Length -gt $len) { $len = $oul.Length } }
-    foreach ($OU in $OUs) {
-        $Name = Split-Path $OU.CanonicalName -Leaf
-        $ou_path = (Get-ADObject -Identity $ou -Properties * | Select-Object CanonicalName).CanonicalName
-        $ou_path = $ou_path.Replace("$dom_root/","~/").Replace("$Name","")
-        # Hierarchische Einrueckung: Tiefe = Anzahl uebergeordneter OUs (CanonicalName-Ebenen ohne
-        # Domain und ohne eigenen Namen). Da nach CanonicalName sortiert wird, steht jede Eltern-OU
-        # vor ihren Kind-OUs (Pre-Order); der Einzug macht die OU-Struktur iterativ sichtbar.
-        $tiefe = $OU.CanonicalName.Split('/').Count - 2
-        if ($tiefe -lt 0) { $tiefe = 0 }
-        $einzug = '  ' * $tiefe
-        if ($OrgUni -eq '2') { $ou_name = ($einzug + $Name).PadRight($len + 8) + " - $ou_path" }
-            else { $ou_name = $einzug + $Name }
-        $User = (Get-AdUser -Filter * -SearchBase $OU.DistinguishedName -SearchScope OneLevel).Count
-        if($User -eq 0) { $User1 = "0" } elseif($User -ge 1) {$User1 = $User} else { $User1 = "1" }
-        $Sys = (Get-AdComputer -Filter * -SearchBase $OU.DistinguishedName -SearchScope OneLevel).Count
-        if($Sys -eq 0) { $Sys1 = "0" } elseif($Sys -ge 1) {$Sys1 = $Sys} else { $Sys1 = "1" }
-        $ADG = (Get-ADGroup -Filter * -SearchBase $OU.DistinguishedName -Searchscope OneLevel).count
-        if($ADG -eq 0) { $ADG1 = "0" } elseif($ADG -ge 1) {$ADG1 = $ADG} else { $ADG1 = "1" }
-        $gMSA = (Get-ADServiceAccount -Filter * -SearchBase $OU.DistinguishedName -Searchscope OneLevel).count
-        if($gMSA -eq 0) { $gMSA1 = "0" } elseif($gMSA -ge 1) {$gMSA1 = $gMSA} else { $gMSA1 = "1" }
-        [string]$o_u5 = (Get-ADOrganizationalUnit -Filter * -SearchBase $ou | Select-Object Name).count
-        if ($o_u5) { 
-            if($o_u5 -eq 0) { $o_u51 = "0" }
-            elseif($o_u5 -ge 1) {$o_u51 = $o_u5 - 1}
-            else { $o_u51 = "1" }
-        } else {
-            $o_u51 = "0"
+    # Echte AD-Hierarchie rekursiv als Baum darstellen (Pre-Order, Geschwister nach Name).
+    # Spaltenbreite an die laengste Baumzeile angleichen, damit die Zaehler-Spalten fluchten.
+    $baum = @(OU_Sammle $dist '')
+    if ($baum.Count -gt 0) {
+        $maxLen = 0 ; foreach ($b in $baum) { if ($b.Anzeige.Length -gt $maxLen) { $maxLen = $b.Anzeige.Length } }
+        foreach ($b in $baum) {
+            neu_tab_max6w_fb "5" "l" "s" "4" ($b.Anzeige.PadRight($maxLen + 1)) "$($b.User)" "$($b.Sys)" "$($b.ADG)" "$($b.gMSA)" "$($b.SubOU)"
         }
-        neu_tab_max6w_fb "5" "l" "s" "4" $ou_name $User1 $Sys1 $ADG1 $gMSA1 $o_u51
     }
     tablinie "s"
     Leerzeile
