@@ -2783,6 +2783,18 @@ function sys_konten {
 ####################################################################################################
 # Funktionen fuer den Bereich "Client Check"                                                       #
 ####################################################################################################
+function EoL-Farbe ($eolDatum) {
+    # Bestimmt die Farbe eines End-of-Life-Eintrags anhand des aktuellen Datums.
+    # $eolDatum = 'dd.MM.yyyy' (evtl. mit Zusatz wie ' (ES)'), oder Text wie 'aktuell'/'End of Life'.
+    # Rueckgabe: 'Red' = EoL erreicht/ueberschritten bzw. unbekannt; 'Green' = noch supported.
+    $rein = ("$eolDatum" -replace '\s.*$', '').Trim()
+    if ($rein -match '^\d{2}\.\d{2}\.\d{4}$') {
+        try { if ([datetime]::ParseExact($rein, 'dd.MM.yyyy', $null) -lt (Get-Date)) { return 'Red' } else { return 'Green' } }
+        catch { return 'Red' }
+    }
+    if ($rein -in @('aktuell', 'supported')) { return 'Green' }
+    return 'Red'    # 'End of Life', 'unbekannt', leer o. ae. -> als EoL behandeln
+}
 function clt_chk {
     $zaehler_c = 0
     ##### Windows XP ###############################################################################
@@ -2876,71 +2888,50 @@ function clt_chk {
             }
         tablinie
         }
-        if ($win10 -gt "0") { 
-            foreach ($10ko in $win10ko) { 
+        if ($win10 -gt "0") {
+            foreach ($10ko in $win10ko) {
                 $buf_1 = (Get-ADComputer -Identity $10ko -Properties *).OperatingSystemVersion
                 $buf_1 = (($buf_1.Replace(")","")).Split("("))[1]
-                if ($buf_1 -lt "19044") { 
-                    $sys_1 = "vor Windows 10 21H2"
-                    $EoS_1 = "End of Life" ; $EoS_1_fa = "Red"
-                    if($10ko.Enabled -eq $true) {$ena_10_fa = "Red"} else { $ena_10_fa = "Green" }
-                    neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $10ko.Name $10ko.IPv4Address $EoS_1 $ena_10_fa "" $EoS_1_fa
-                }
-                if ($buf_1 -eq "19044") { 
-                    $sys_1 = "Windows 10 21H2"
-                    $EoS_1 = "11.06.2024" ; $EoS_1_fa = "Green"
-                    if($10ko.Enabled -eq $true) {$ena_10_fa = "Green"} else { $ena_10_fa = "Yellow" }
-                    neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $10ko.Name $10ko.IPv4Address $EoS_1 $ena_10_fa "" $EoS_1_fa
-                }
-                if ($cltchk -eq 2) {
-                    if ($buf_1 -eq "19045") {
-                        $sys_1 = "Windows 10 22H2"
-                        $EoS_1 = "14.10.2025" ; $EoS_1_fa = "Green"
-                        if($10ko.Enabled -eq $true) {$ena_10_fa = "Green"} else { $ena_10_fa = "Yellow" }
-                        neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $10ko.Name $10ko.IPv4Address $EoS_1 $ena_10_fa "" $EoS_1_fa
+                switch ($buf_1) {
+                    '19045' { $sys_1 = 'Windows 10 22H2' ; $EoS_1 = '14.10.2025' }
+                    '19044' { $sys_1 = 'Windows 10 21H2' ; $EoS_1 = '11.06.2024' }
+                    default {
+                        if ([int]$buf_1 -gt 19045) { $sys_1 = 'neuer als Windows 10 22H2' ; $EoS_1 = '14.10.2025' }
+                        else                       { $sys_1 = 'vor Windows 10 21H2'        ; $EoS_1 = 'End of Life' }
                     }
-                    if ($buf_1 -gt "19045") {
-                        $sys_1 = "neuer als Basis 22H2"
-                        $EoS_1 = "14.10.2025" ; $EoS_1_fa = "Green"
-                        if($10ko.Enabled -eq $true) {$ena_10_fa = "Green"} else { $ena_10_fa = "Yellow" }
-                        neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $10ko.Name $10ko.IPv4Address $EoS_1 $ena_10_fa "" $EoS_1_fa
-                    }
+                }
+                $EoS_1_fa = EoL-Farbe $EoS_1
+                if ($cltchk -eq 2 -or $EoS_1_fa -eq 'Red') {
+                    if ($10ko.Enabled) { $ena_10_fa = if ($EoS_1_fa -eq 'Red') { 'Red' }   else { 'Green' } }
+                    else               { $ena_10_fa = if ($EoS_1_fa -eq 'Red') { 'Green' } else { 'Yellow' } }
+                    neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $10ko.Name $10ko.IPv4Address $EoS_1 $ena_10_fa "" $EoS_1_fa
                 }
             }
         tablinie
         }
-        if ($win11 -gt "0") { 
-            foreach ($11ko in $win11ko) { 
+        if ($win11 -gt "0") {
+            foreach ($11ko in $win11ko) {
                 $buf_2 = (Get-ADComputer -Identity $11ko -Properties *).OperatingSystemVersion
                 $buf_2 = (($buf_2.Replace(")","")).Split("("))[1]
-                #$ena_11 = $11ko.Enabled
-                if ($buf_2 -lt "22000") { 
-                    $sys_1 = "vor Windows 11 21H2"
-                    $EoS_1 = "End of Life" ; $EoS_1_fa = "Red"
-                    if($11ko.Enabled -eq $true) {$ena_11_fa = "Red"} else {$ena_11_fa = "Green"}
-                    neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $11ko.Name $11ko.IPv4Address $EoS_1 $ena_11_fa "" $EoS_1_fa
-                }
-                if ($buf_2 -eq "22000") { 
-                    $sys_1 = "Windows 11 21H2"
-                    $EoS_1 = "08.10.2024" ; $EoS_1_fa = "Green"
-                    if($11ko.Enabled -eq $true) {$ena_11_fa = "Green"} else {$ena_11_fa = "Red"}
-                    neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $11ko.Name $11ko.IPv4Address $EoS_1 $ena_11_fa "" $EoS_1_fa
-                }
-                if ($cltchk -eq 2) {
-                    if ($buf_2 -eq "22621") { 
-                        $sys_1 = "Windows 11 22H2"
-                        $EoS_1 = "14.10.2025" ; $EoS_1_fa = "Green"
-                        if($11ko.Enabled -eq $true) {$ena_11_fa = "Green"} else {$ena_11_fa = "Red"}
-                        neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $11ko.Name $11ko.IPv4Address $EoS_1 $ena_11_fa "" $EoS_1_fa
+                switch ($buf_2) {
+                    '22000' { $sys_1 = 'Windows 11 21H2' ; $EoS_1 = '08.10.2024' }
+                    '22621' { $sys_1 = 'Windows 11 22H2' ; $EoS_1 = '14.10.2025' }
+                    '22631' { $sys_1 = 'Windows 11 23H2' ; $EoS_1 = '10.11.2026' }
+                    '26100' { $sys_1 = 'Windows 11 24H2' ; $EoS_1 = '12.10.2027' }
+                    '26200' { $sys_1 = 'Windows 11 25H2' ; $EoS_1 = '10.10.2028' }
+                    default {
+                        if ([int]$buf_2 -lt 22000) { $sys_1 = 'vor Windows 11 21H2'        ; $EoS_1 = 'End of Life' }
+                        else                       { $sys_1 = "Windows 11 (Build $buf_2)"   ; $EoS_1 = 'aktuell' }
                     }
-                    if ($buf_2 -gt "22621") { 
-                        $sys_1 = "neuer als Basis 22H2"
-                        $EoS_1 = "14.10.2025" ; $EoS_1_fa = "Green"
-                        if($11ko.Enabled -eq $true) {$ena_11_fa = "Green"} else {$ena_11_fa = "Red"}
-                        neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $11ko.Name $11ko.IPv4Address $EoS_1 $ena_11_fa "" $EoS_1_fa
-                    }
+                }
+                $EoS_1_fa = EoL-Farbe $EoS_1
+                if ($cltchk -eq 2 -or $EoS_1_fa -eq 'Red') {
+                    if ($11ko.Enabled) { $ena_11_fa = if ($EoS_1_fa -eq 'Red') { 'Red' }   else { 'Green' } }
+                    else               { $ena_11_fa = if ($EoS_1_fa -eq 'Red') { 'Green' } else { 'Yellow' } }
+                    neu_tab_max6w_fb "3" "l" "s" "15" $sys_1 $11ko.Name $11ko.IPv4Address $EoS_1 $ena_11_fa "" $EoS_1_fa
                 }
             }
+        tablinie
         }
         Leerzeile
     }
@@ -3016,6 +3007,14 @@ function srv_chk {
     $2022ko = Get-ADComputer -filter * -Properties * | `
         Where-Object {$_.operatingsystem -like 'windows server 2022*' }
     $zaehler_s = $zaehler_s + $2022
+    ##### Server 2025 ##############################################################################
+    $2025 = @(Get-ADComputer -filter * -Properties OperatingSystem | `
+        Where-Object {$_.operatingsystem -like 'windows server 2025*' }).Count
+    if($2025 -eq 0) { $2025 = "0" ; $f2k25 = "Green" } elseif($2025 -gt 1) { $f2k25 = "Green" } `
+        else { $2025 = "1" ; $f2k25 = "Green" }
+    $2025ko = Get-ADComputer -filter * -Properties * | `
+        Where-Object {$_.operatingsystem -like 'windows server 2025*' }
+    $zaehler_s = $zaehler_s + $2025
     ##### Zusammenfassung ##########################################################################
     Bereichstitel "Server nach OS:"
     Leerzeile
@@ -3028,6 +3027,7 @@ function srv_chk {
     2werte " Windows Server 2016    :" $2016 "s" $f2k16
     2werte " Windows Server 2019    :" $2019 "s" $f2k19
     2werte " Windows Server 2022    :" $2022 "s" $f2k22
+    2werte " Windows Server 2025    :" $2025 "s" $f2k25
     Leerzeile
     if ($zaehler_s -ne 0) {
         if ($srvchk -eq 2) { Bereichstitel "Liste der Server nach OS:" } else {
@@ -3107,36 +3107,26 @@ function srv_chk {
             }
             tablinie
         }
-        if ($2016 -gt "0") { 
-            foreach ($16ko in $2016ko) { 
-                $EoS_16 = "12.01.2027 (ES)" ; $EoS_16_fa = "Yellow"
-                $ena_16 = $16ko.Enabled
-                if($ena_16 -eq $true) {$ena_16_fa = "Green"} else {$ena_16_fa = "Yellow"}
-                neu_tab_max6w_fb "3" "l" "s" "15" $16ko.OperatingSystem $16ko.Name $16ko.IPv4Address $EoS_16 $ena_16_fa "" $EoS_16_fa
+        # Aktuelle Server-Generationen: EoL-Datum (Extended Support) -> Farbe ueber EoL-Farbe.
+        # In Modus 1 ("veraltete") erscheinen sie nur, wenn das EoL-Datum erreicht ist; in Modus 2 immer.
+        $srv_modern = @(
+            @{ Anz = $2016 ; Liste = $2016ko ; EoS = '12.01.2027' }
+            @{ Anz = $2019 ; Liste = $2019ko ; EoS = '09.01.2029' }
+            @{ Anz = $2022 ; Liste = $2022ko ; EoS = '14.10.2031' }
+            @{ Anz = $2025 ; Liste = $2025ko ; EoS = '14.11.2034' }
+        )
+        foreach ($grp in $srv_modern) {
+            if ([int]$grp.Anz -le 0) { continue }
+            $EoS_m_fa = EoL-Farbe $grp.EoS
+            if (-not ($srvchk -eq 2 -or $EoS_m_fa -eq 'Red')) { continue }
+            $gezeigt = $false
+            foreach ($mko in $grp.Liste) {
+                if ($mko.Enabled) { $ena_m_fa = if ($EoS_m_fa -eq 'Red') { 'Red' }   else { 'Green' } }
+                else              { $ena_m_fa = if ($EoS_m_fa -eq 'Red') { 'Green' } else { 'Yellow' } }
+                neu_tab_max6w_fb "3" "l" "s" "15" $mko.OperatingSystem $mko.Name $mko.IPv4Address $grp.EoS $ena_m_fa "" $EoS_m_fa
+                $gezeigt = $true
             }
-            tablinie
-        }
-        if($srvchk -eq 2){
-            if ($2019 -gt "0") {
-                foreach ($19ko in $2019ko) { 
-                    $EoS_19 = "09.01.2024" ; $EoS_19_fa = "Green"
-                    #$EoS_19 = "09.01.2029" ; $EoS_19_fa = "yellow"
-                    $ena_19 = $19ko.Enabled
-                    if($ena_19 -eq $true) {$ena_19_fa = "Green"} else {$ena_19_fa = "Yellow"}
-                    neu_tab_max6w_fb "3" "l" "s" "15" $19ko.OperatingSystem $19ko.Name $19ko.IPv4Address $EoS_19 $ena_19_fa "" $EoS_19_fa
-                }
-                tablinie
-            }
-            if ($2022 -gt "0") { 
-                foreach ($22ko in $2022ko) { 
-                    $EoS_22 = "13.10.2026" ; $EoS_22_fa = "Green"
-                    #$EoS_22 = "14.10.2031" ; $EoS_22_fa = "yellow"
-                    $ena_22 = $22ko.Enabled
-                    if($ena_22 -eq $true) {$ena_22_fa = "Green"} else {$ena_22_fa = "Yellow"}
-                    neu_tab_max6w_fb "3" "l" "s" "15" $22ko.OperatingSystem $22ko.Name $22ko.IPv4Address $EoS_22 $ena_22_fa "" $EoS_22_fa
-                }
-                tablinie
-            }
+            if ($gezeigt) { tablinie }
         }
         Leerzeile
     }
