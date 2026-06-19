@@ -1663,7 +1663,7 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
                 [void]$H.AppendLine("<h2 class=""phase"">$(Esc $e.Titel)</h2>")
             }
             'Bereich'  {
-                # Folgt direkt ein Doku-Ereignis, bekommt die Ueberschrift Anker-ID und Severity-Badge.
+                # Folgt direkt ein Doku-Ereignis, bekommt die Ueberschrift eine Anker-ID (Sprungmarke).
                 $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
                 if ($next -and $next.Art -eq 'Doku') {
                     # Katalog-Titel (mit Umlauten) statt des ASCII-Bereichstitels verwenden.
@@ -1693,7 +1693,7 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
             }
             'Titel'    {
                 # Wie bei 'Bereich': folgt ein Doku-Ereignis, bekommt die Unterueberschrift
-                # Anker-ID und Severity-Badge (fuer Unterpruefungen der Sicherheits-Pakete).
+                # eine Anker-ID (Sprungmarke, fuer Unterpruefungen der Sicherheits-Pakete).
                 $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
                 if ($next -and $next.Art -eq 'Doku') {
                     # Katalog-Titel (mit Umlauten) statt des ASCII-Untertitels verwenden.
