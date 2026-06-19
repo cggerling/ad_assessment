@@ -9,8 +9,8 @@
     fest formatierten Text-Report erzeugt. Die einzelnen Pruefbereiche lassen sich ueber
     Schalter-Variablen im Kopf des Skripts (Wert 0/1/2) aktivieren bzw. deaktivieren.
 
-    Abgedeckte Bereiche (Auswahl): Domain/Forest/FSMO, Schema, Central Store & Security
-    Templates, Domain Controller, Logging/Audit, AD-Trusts, DNS, SYSVOL/DFSR-Replikation,
+    Abgedeckte Bereiche (Auswahl): Domain/Forest/FSMO, Schema, Central Store,
+    Domain Controller, Logging/Audit, AD-Trusts, DNS, SYSVOL/DFSR-Replikation,
     administrative Gruppen, Benutzer- und Computerkonten, MSA/gMSA, Passwort-Policies
     (Default & Fine-Grained), AD-Gruppen, GPOs, Organisationseinheiten, Zertifizierungs-
     stellen sowie DC-Detailpruefungen (Dienste, Rollen, Features, LDAPS, NTLM, SMB1,
@@ -132,9 +132,8 @@ $A_Jsn = 1                                       # Zusaetzlich JSON-Export? 1=Ja
 # Domain Allgemein #                             ###################################################
 $domoco = 1                                      # Domain/Mode/DC/FSMO               (0=nein,1=ja) #
 $schema = 1                                      # Attribute zu Schema Erweiterungen (0=nein,1=ja) #
-# Central Store & Templates                      ###################################################
+# Central Store                                  ###################################################
 $censto = 1                                      # Central Store prüfen              (0=nein,1=ja) #
-$sectem = 1                                      # Sec. Templates prüfen             (0=nein,1=ja) #
 # Domain Controller #                            ###################################################
 $domdcs = 1                                      # Domain Controller                 (0=nein,1=ja) #
 # Logging auf DCs #                              ###################################################
@@ -198,7 +197,7 @@ if ($KeineDatei)   { $A_Dat = 0 }                # Datei-Ausgabe per Parameter a
 if ($KeinHTML)     { $A_Htm = 0 }                # HTML-Report per Parameter aus                   #
 if ($KeinJSON)     { $A_Jsn = 0 }                # JSON-Export per Parameter aus                   #
 if ($Bereiche) {                                 # Einzelne Schalter per Hashtable ueberschreiben  #
-    $schalterListe = @('domoco','schema','censto','sectem','domdcs','loggin','adtchk','dnschk',    #
+    $schalterListe = @('domoco','schema','censto','domdcs','loggin','adtchk','dnschk',             #
                        'SysRep','admusr','lokadm','AdmGri','buildi','priusr','usrchk','inachk',    #
                        'geschk','falchk','syschk','cltchk','srvchk','no_win','manacc','dDPchk',    #
                        'fgppch','userpw','allgru','allgpo','OrgUni','caschk','DomCon','kerbchk',   #
@@ -297,8 +296,8 @@ $CheckKatalog = @{
         )
     }
     'central_store' = @{
-        Titel = 'Central Store & Templates'; Schwere = 'Niedrig'
-        Zweck = 'Prüft, ob ein zentraler Speicher (Central Store) für GPO-Vorlagen (ADMX/ADML) im SYSVOL existiert und ob Security-Templates vorhanden sind. Der Central Store hält die GPO-Vorlagen auf allen DCs einheitlich.'
+        Titel = 'Central Store'; Schwere = 'Niedrig'
+        Zweck = 'Prüft, ob ein zentraler Speicher (Central Store) für GPO-Vorlagen (ADMX/ADML) im SYSVOL existiert. Der Central Store hält die GPO-Vorlagen auf allen DCs einheitlich.'
         Beispiel = 'Ohne Central Store ziehen Administratoren die ADMX-Dateien vom lokalen Rechner - je nach Patchstand fehlen dann Richtlinien-Einstellungen oder sind uneinheitlich.'
         Empfehlung = 'Central Store unter \\<Domäne>\SYSVOL\<Domäne>\Policies\PolicyDefinitions anlegen und aktuell halten.'
         Hintergrund = 'Gruppenrichtlinien-Vorlagen liegen als sprachneutrale .admx- und sprachspezifische .adml-Dateien vor. Ohne Central Store liest jede Verwaltungsstation diese aus ihrem lokalen C:\Windows\PolicyDefinitions - bei unterschiedlichen Patchständen entstehen abweichende oder fehlende Richtlinien-Definitionen ("SYSVOL bloat" entfällt mit ADMX zusätzlich). Der Central Store unter \\<Domäne>\SYSVOL\<Domäne>\Policies\PolicyDefinitions wird von den GPO-Werkzeugen bevorzugt und repliziert mit SYSVOL auf alle DCs.'
@@ -1550,15 +1549,12 @@ table.kv td:first-child{width:42%;color:var(--muted)}
 .meta{color:var(--muted);font-size:.9rem}
 .fehler{border-left:4px solid var(--err);background:var(--fehler-bg);padding:.6rem .9rem;margin:.8rem 0}
 footer{margin-top:3rem;border-top:1px solid var(--border);padding-top:.6rem}
-.badge{font-size:.72rem;font-weight:500;padding:1px 8px;border-radius:6px;vertical-align:middle;margin-left:8px;white-space:nowrap}
-.sev-krit{background:#F7C1C1;color:#501313}.sev-hoch{background:#F5C4B3;color:#4A1B0C}.sev-mit{background:#FAC775;color:#412402}.sev-nied{background:#B5D4F4;color:#042C53}.sev-info{background:#D3D1C7;color:#2C2C2A}
 details.doku{background:var(--info-bg);border:1px solid var(--border);border-radius:8px;padding:.3rem .8rem;margin:.2rem 0 1.2rem;font-size:.9rem}
 details.doku summary{cursor:pointer;color:var(--accent);font-weight:500;padding:.3rem 0}
 details.doku p{margin:.5rem 0;line-height:1.55}
 details.doku .lbl{font-weight:500;color:var(--muted)}
 .zus{margin:1rem 0 1.5rem;padding:.8rem 1rem;background:var(--zebra);border-radius:8px}
 .zus h2{margin:.2rem 0 .6rem;border:0;padding:0}
-.zus .counts{margin:.2rem 0 .8rem}
 .zus ul{margin:.2rem 0;padding-left:1.1rem;font-size:.95rem}
 .zus li{margin:.15rem 0}
 .zus a{color:var(--accent);text-decoration:none}
@@ -1580,16 +1576,7 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
         [void]$H.AppendLine("<p class=""meta"">$(Esc $kopf.Typ) &middot; System: $(Esc $kopf.System) &middot; $(Esc $kopf.Datum) &middot; $(Esc $kopf.Firma)</p>")
     }
     [void]$H.AppendLine('</header>')
-    function SevKlasse ($s) {
-        switch ("$s") {
-            'Kritisch' { 'sev-krit' ; break }
-            'Hoch'     { 'sev-hoch' ; break }
-            'Mittel'   { 'sev-mit'  ; break }
-            'Niedrig'  { 'sev-nied' ; break }
-            default    { 'sev-info' }
-        }
-    }
-    ### Zusammenfassung: Pruefbereiche nach Einstufung, mit Sprungmarken ##########################
+    ### Zusammenfassung: Pruefbereiche nach Phase, mit Sprungmarken ###############################
     $dokus = @($R_Daten | Where-Object { $_.Art -eq 'Doku' })
     if ($dokus.Count -gt 0) {
         # Jede Begruendung (Doku) ihrer Phase zuordnen (in Reihenfolge der Ereignisse),
@@ -1600,23 +1587,19 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
             if ($e.Art -eq 'Phase') { $curPhase = "$($e.Titel)" }
             elseif ($e.Art -eq 'Doku') { [void]$dokuListe.Add([pscustomobject]@{ Phase = $curPhase; D = $e }) }
         }
-        $cnt = [ordered]@{ Kritisch = 0; Hoch = 0; Mittel = 0; Niedrig = 0; Info = 0 }
-        foreach ($d in $dokus) { if ($cnt.Contains("$($d.Schwere)")) { $cnt["$($d.Schwere)"]++ } }
         [void]$H.AppendLine('<section class="zus">')
         [void]$H.AppendLine('<h2>Zusammenfassung</h2>')
-        $teile = foreach ($s in $cnt.Keys) { "<span class=""badge $(SevKlasse $s)"">$s $($cnt[$s])</span>" }
-        [void]$H.AppendLine("<div class=""counts"">$($teile -join ' ')</div>")
         $phasen = @($dokuListe | ForEach-Object { $_.Phase } | Select-Object -Unique)
         foreach ($ph in $phasen) {
             if ($ph) { [void]$H.AppendLine("<h3>$(Esc $ph)</h3>") }
             [void]$H.AppendLine('<ul>')
             foreach ($item in @($dokuListe | Where-Object { $_.Phase -eq $ph })) {
                 $d = $item.D
-                [void]$H.AppendLine("<li><a href=""#chk-$($d.CheckId)"">$(Esc $d.DTitel)</a> <span class=""badge $(SevKlasse $d.Schwere)"">$(Esc $d.Schwere)</span></li>")
+                [void]$H.AppendLine("<li><a href=""#chk-$($d.CheckId)"">$(Esc $d.DTitel)</a></li>")
             }
             [void]$H.AppendLine('</ul>')
         }
-        [void]$H.AppendLine('<p class="meta">Hinweis: Die Einstufung bewertet die Wichtigkeit des Prüfbereichs, nicht zwingend einen konkreten Befund. Begründung und Empfehlung je Bereich im jeweiligen Block "Hintergrund &amp; Empfehlung".</p>')
+        [void]$H.AppendLine('<p class="meta">Gegliedert nach Phase. Begründung und Empfehlung je Bereich im jeweiligen Block "Hintergrund &amp; Empfehlung".</p>')
         [void]$H.AppendLine('</section>')
     }
     $offen = ''                                  # aktuell geoeffnete Tabelle: '' | 'kv' | 'tab'
@@ -1634,7 +1617,7 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
                 $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
                 if ($next -and $next.Art -eq 'Doku') {
                     # Katalog-Titel (mit Umlauten) statt des ASCII-Bereichstitels verwenden.
-                    [void]$H.AppendLine("<h2 id=""chk-$($next.CheckId)"">$(Esc $next.DTitel) <span class=""badge $(SevKlasse $next.Schwere)"">$(Esc $next.Schwere)</span></h2>")
+                    [void]$H.AppendLine("<h2 id=""chk-$($next.CheckId)"">$(Esc $next.DTitel)</h2>")
                 } else {
                     [void]$H.AppendLine("<h2>$(Esc $e.Titel)</h2>")
                 }
@@ -1664,7 +1647,7 @@ details.doku .lbl{font-weight:500;color:var(--muted)}
                 $next = if ($ix + 1 -lt $R_Daten.Count) { $R_Daten[$ix + 1] } else { $null }
                 if ($next -and $next.Art -eq 'Doku') {
                     # Katalog-Titel (mit Umlauten) statt des ASCII-Untertitels verwenden.
-                    [void]$H.AppendLine("<h3 id=""chk-$($next.CheckId)"">$(Esc $next.DTitel) <span class=""badge $(SevKlasse $next.Schwere)"">$(Esc $next.Schwere)</span></h3>")
+                    [void]$H.AppendLine("<h3 id=""chk-$($next.CheckId)"">$(Esc $next.DTitel)</h3>")
                 } else {
                     [void]$H.AppendLine("<h3>$(Esc $e.Text)</h3>")
                 }
@@ -1897,44 +1880,7 @@ function centralstore {
     new_2werte "s" ":" "23" ' - Anzahl der Templates' "" "l" "$fi_en_za" "$fi_en_za_fa" "l"
     Leerzeile
 }
-function sec_templates {
-    Subtitel "Check der Sec. Templates:" "1" "-"
-    Leerzeile
-    ################################################################################################
-    # Pfad Variablen                                                                               #
-    ################
-    $fqdn = (Get-ADDomain).DNSRoot
-    $we_ =   '\\' + $fqdn + '\Sysvol\' + $fqdn + '\Policies\PolicyDefinitions\'
-    $we_de = '\\' + $fqdn + '\Sysvol\' + $fqdn + '\Policies\PolicyDefinitions\de-DE\'
-    $we_en = '\\' + $fqdn + '\Sysvol\' + $fqdn + '\Policies\PolicyDefinitions\en-US\'
-    ################################################################################################
-    # Array füllen                                                                                 #
-    ##############
-    $templates = @()
-    $templates += "AdmPwd"
-    $templates += "MSS-legacy"
-    $templates += "SecGuide"
-    $templates += "LAPS"
-    $templates += "Set-NetBIOS-node-type-KB160177"
-    ################################################################################################
-    foreach ($tem in $templates) 
-    {
-        Subtitel $tem "2" "-"
-        $pa1 = $we_ + $tem + '.admx'
-        $pa2 = $we_de + $tem + '.adml'
-        $pa3 = $we_en + $tem + '.adml'
-        if(Test-Path $pa1) 
-        { new_2werte "s" ":" "23" ' Status ADMX-File' "" "l" "vorhanden" "green" "l" } else 
-        { new_2werte "s" ":" "23" ' Status ADMX-File' "" "l" "nicht vorhanden" "red" "l" }
-        if(Test-Path $pa2) 
-        { new_2werte "s" ":" "23" ' - DE ADML-File' "" "l" "vorhanden" "green" "l" } else 
-        { new_2werte "s" ":" "23" ' - DE ADML-File' "" "l" "nicht vorhanden" "red" "l" }
-        if(Test-Path $pa3) 
-        { new_2werte "s" ":" "23" ' - EN ADML-File' "" "l" "vorhanden" "green" "l" } else 
-        { new_2werte "s" ":" "23" ' - EN ADML-File' "" "l" "nicht vorhanden" "red" "l" }
-        Leerzeile
-    }
-}
+
 ####################################################################################################
 # Funktionen fuer den Bereich "Domain Controller"                                                  #
 ####################################################################################################
@@ -3841,7 +3787,6 @@ function ca_sub {
         if($netco) { $err = "aktiv" ; $fa_err = "Green" } else { $err = "inaktiv" ; $fa_err = "Red" }
 
 
-
         $au_ti = "Zertifizierungsstellenname: " + $su.Name
         $au_ti_ul = "-" * $au_ti.Length
         2werte "Zertifizierungsstellenname:" $su.Name "s" $fa_su
@@ -4749,10 +4694,10 @@ if($domoco -ge 1){
     }
 }
 
-if($censto -ge 1 -or $sectem -ge 1){
-    Pruefbereich "Central Store & Templates" -CheckId 'central_store' {
-        if($censto -ge 1){ centralstore }
-        if($sectem -ge 1){ sec_templates }
+if($censto -ge 1){
+    Pruefbereich "Central Store" -CheckId 'central_store' {
+        Leerzeile
+        centralstore
     }
 }
 

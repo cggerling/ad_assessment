@@ -131,6 +131,13 @@ Describe 'AD-Analyse-V5.ps1' {
             $inhalt | Should -Match 'Version       : 5\.0'
         }
 
+        It 'Central Store: Sec.-Templates-Teil und $sectem entfernt; Bereich heisst nur "Central Store"' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Not -Match 'sec_templates'
+            $inhalt | Should -Not -Match '\$sectem'
+            $global:CheckKatalog['central_store'].Titel | Should -Be 'Central Store'
+        }
+
         It 'ist als UTF-8 mit BOM gespeichert (korrekte Umlaute auch unter PS 5.1)' {
             $bytes = [System.IO.File]::ReadAllBytes($skriptPfad)
             $bytes[0] | Should -Be 0xEF
@@ -621,7 +628,7 @@ Describe 'AD-Analyse-V5.ps1' {
             ($global:R_Daten | Where-Object { $_.Art -eq 'Doku' }).CheckId | Should -Be 'dns'
         }
 
-        It 'HTML_Report rendert einklappbaren Doku-Block, Severity-Badge und Zusammenfassung' {
+        It 'HTML_Report rendert einklappbaren Doku-Block und Zusammenfassung (ohne Severity-Badge)' {
             Header
             Pruefbereich 'Administratoren und Builtin Benutzer' -CheckId 'admins' {
                 2werte 'Domain Admins:' '5 Mitglieder' $null 'Red'
@@ -634,7 +641,8 @@ Describe 'AD-Analyse-V5.ps1' {
             $html | Should -Match '<summary>Hintergrund &amp; Empfehlung</summary>'
             $html | Should -Match '<span class="lbl">Zweck:</span>'
             $html | Should -Match '<span class="lbl">Empfehlung:</span>'
-            $html | Should -Match 'badge sev-hoch'                               # Severity-Badge
+            $html | Should -Not -Match 'class="badge"'                          # keine Severity-Badges mehr
+            $html | Should -Not -Match 'sev-'                                   # keine Severity-Klassen mehr
             $html | Should -Match 'id="chk-admins"'                             # Anker
             $html | Should -Match '<section class="zus">'                        # Zusammenfassung
             $html | Should -Match 'href="#chk-dns"'                             # Sprungmarke
@@ -716,7 +724,7 @@ Describe 'AD-Analyse-V5.ps1' {
             }
         }
 
-        It 'Unterpruefung erzeugt Titel + Doku und rendert eine Unterueberschrift mit Badge' {
+        It 'Unterpruefung erzeugt Titel + Doku und rendert eine Unterueberschrift (ohne Badge)' {
             Unterpruefung 'Kerberoasting (Konten mit SPN)' 'kerberoasting' {
                 2werte 'Benutzerkonten mit SPN:' '3' 's' 'Red'
             }
@@ -728,7 +736,7 @@ Describe 'AD-Analyse-V5.ps1' {
             $htmlPfad = [System.IO.Path]::ChangeExtension($global:path, 'html')
             $html = Get-Content -LiteralPath $htmlPfad -Raw
             $html | Should -Match '<h3 id="chk-kerberoasting">'
-            $html | Should -Match 'badge sev-hoch'
+            $html | Should -Not -Match 'class="badge"'
             Remove-Item $htmlPfad -Force -ErrorAction SilentlyContinue
         }
 
