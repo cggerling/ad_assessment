@@ -146,6 +146,12 @@ Describe 'AD-Analyse-V5.ps1' {
             $inhalt | Should -Match 'Bereichstitel "BitLocker Feature:" "s"'
         }
 
+        It 'OU-Aufteilung wird hierarchisch eingerueckt (Tiefe aus CanonicalName)' {
+            $inhalt = Get-Content -LiteralPath $skriptPfad -Raw
+            $inhalt | Should -Match '\$tiefe = \$OU\.CanonicalName\.Split'
+            $inhalt | Should -Match "\`$einzug = '  ' \* \`$tiefe"
+        }
+
         It 'ist als UTF-8 mit BOM gespeichert (korrekte Umlaute auch unter PS 5.1)' {
             $bytes = [System.IO.File]::ReadAllBytes($skriptPfad)
             $bytes[0] | Should -Be 0xEF

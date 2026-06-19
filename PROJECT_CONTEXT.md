@@ -123,6 +123,13 @@ Das Skript hat **65 Funktionen** und folgt grob drei Schichten:
 
 ## 7. Aktueller Stand (Changelog)
 
+**OU-Aufteilung hierarchisch/iterativ (Juni 2026, AD-Analyse-V5.ps1):**
+- Die „Aufteilung OU zu User, Systemen, AD-Gruppen und gMSA" zeigt die OUs jetzt **eingerückt nach
+  Tiefe** statt flach alphabetisch. Da bereits nach `CanonicalName` (Pre-Order: Eltern vor Kindern)
+  sortiert wird, genügt der tiefenbasierte Einzug (`$tiefe = CanonicalName.Split('/').Count - 2`),
+  um die Struktur iterativ sichtbar zu machen (Eltern-OU, dann ihre Kind-OUs, dann nächste Ebene).
+- Tests **103 → 104** (statischer Guard für die Einrück-Logik), grün PS 7 + 5.1.
+
 **DC-Detailprüfung: NTLM-Klartext + BitLocker als eigener Bereich (Juni 2026, AD-Analyse-V5.ps1):**
 - **NTLM Einstellungen**: zeigt jetzt den geprüften **Registry-Pfad** (`HKLM:\SYSTEM\CurrentControlSet\
   Control\Lsa`) und **Wertname** (`LmCompatibilityLevel`) sowie den **tatsächlichen Wert** mit Klartext-
