@@ -512,6 +512,56 @@ $CheckKatalog = @{
             @{ Titel = 'Microsoft Learn - Microsoft Security Compliance Toolkit'; Url = 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/device-management/windows-security-configuration-framework/security-compliance-toolkit-10' }
         )
     }
+    'dc_power' = @{
+        Titel = 'PowerShell-Ausführungsrichtlinie (DC)'; Schwere = 'Niedrig'
+        Zweck = 'Liest je Domänencontroller die PowerShell-Ausführungsrichtlinie (ExecutionPolicy) auf allen Ebenen (Machine-/User-Policy, Process, CurrentUser, LocalMachine) aus.'
+        Hintergrund = 'Die Ausführungsrichtlinie steuert, ob und wie PowerShell-Skripte ausgeführt werden. Sie ist kein echter Schutzmechanismus (sie lässt sich umgehen), gibt aber einen Hinweis auf die Härtung: "Unrestricted" und "Bypass" erlauben das Ausführen beliebiger - auch unsignierter - Skripte ohne Rückfrage und erleichtern so die versehentliche oder bösartige Skriptausführung; "RemoteSigned", "AllSigned" und "Restricted" sind restriktiver. Auf einem Domänencontroller (Tier-0-System) sollte die Richtlinie nicht offen stehen.'
+        Beispiel = 'Steht die Richtlinie auf "Bypass", läuft ein eingeschleustes Skript ungefragt mit den Rechten des angemeldeten Administrators - ideal für einen Angreifer, der bereits Fuß gefasst hat.'
+        Empfehlung = 'Auf Domänencontrollern mindestens "RemoteSigned", besser "AllSigned" verwenden und zentral per GPO erzwingen; Skriptausführung protokollieren.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - about_Execution_Policies'; Url = 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies' }
+        )
+    }
+    'dc_smb' = @{
+        Titel = 'SMB-Protokoll (SMB1/SMB2) auf DCs'; Schwere = 'Hoch'
+        Zweck = 'Prüft je Domänencontroller, ob das veraltete SMB1 installiert bzw. aktiv ist und ob SMB2 aktiv ist.'
+        Hintergrund = 'SMB ist das Protokoll für Datei- und Netzwerkfreigaben. SMB1 ist seit Jahren veraltet, unsicher und Ausgangspunkt schwerwiegender Angriffe (z. B. WannaCry über die EternalBlue-Lücke) - es ist seit Windows Server 2019 standardmäßig nicht mehr installiert und sollte auf Domänencontrollern weder installiert noch aktiv sein. SMB2/3 ist der sichere Nachfolger und muss aktiv bleiben.'
+        Beispiel = 'Ein Domänencontroller mit aktivem SMB1 ist über die bekannte EternalBlue-Lücke angreifbar; ein Wurm kann sich darüber selbstständig im Netz ausbreiten.'
+        Empfehlung = 'SMB1 auf allen DCs entfernen/deaktivieren (Feature "SMB 1.0/CIFS-Unterstützung"); SMB2/3 aktiv lassen; zusätzlich SMB-Signing erzwingen (siehe DC-Härtung).'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Detect, enable and disable SMBv1/v2/v3'; Url = 'https://learn.microsoft.com/en-us/windows-server/storage/file-server/troubleshoot/detect-enable-and-disable-smbv1-v2-v3' }
+        )
+    }
+    'dc_ntlm' = @{
+        Titel = 'NTLM-Stufe (LmCompatibilityLevel)'; Schwere = 'Mittel'
+        Zweck = 'Liest je DC den Registry-Wert LmCompatibilityLevel (HKLM\SYSTEM\CurrentControlSet\Control\Lsa) aus und interpretiert die NTLM-Aushandlungsstufe (0-5).'
+        Hintergrund = 'LmCompatibilityLevel legt fest, welche Varianten der NTLM-Anmeldung ein System sendet und akzeptiert. Niedrige Stufen erlauben die veralteten, leicht angreifbaren Verfahren LM und NTLMv1 (anfällig u. a. für das Weiterleiten abgefangener Anmeldungen und Offline-Cracking); die Stufen 4 und 5 lehnen LM bzw. LM und NTLM ab und erzwingen ausschließlich NTLMv2. Ist der Wert nicht gesetzt, gilt der Windows-Standard - auf Domänencontrollern faktisch Stufe 3, bei der der DC schwächere Verfahren noch akzeptiert.'
+        Beispiel = 'Akzeptiert ein DC noch NTLMv1, lässt sich eine abgefangene Anmeldung leichter weiterverwenden oder offline knacken.'
+        Empfehlung = 'LmCompatibilityLevel auf 5 setzen (nur NTLMv2; LM und NTLM ablehnen) und per GPO erzwingen; NTLM langfristig zugunsten von Kerberos zurückdrängen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Network security: LAN Manager authentication level'; Url = 'https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/security-policy-settings/network-security-lan-manager-authentication-level' }
+        )
+    }
+    'dc_ldaps' = @{
+        Titel = 'LDAPS-Verfügbarkeit (Port 636/3269)'; Schwere = 'Mittel'
+        Zweck = 'Prüft je DC, ob die verschlüsselten LDAP-Ports 636 (LDAPS) und 3269 (Global Catalog über SSL) erreichbar sind.'
+        Hintergrund = 'Standard-LDAP (Port 389) überträgt Verzeichnisanfragen und Anmeldungen unverschlüsselt. LDAPS (Port 636) bzw. der verschlüsselte Global Catalog (Port 3269) sichern diese Kommunikation per TLS - Voraussetzung ist ein gültiges Serverzertifikat auf dem DC. Sind die Ports nicht erreichbar, fehlt die TLS-Absicherung für Anwendungen, die LDAPS benötigen, und vertrauliche Daten könnten im Netz mitgelesen werden. (Das zusätzliche Erzwingen von LDAP-Signing und Channel Binding wird separat im Bereich DC-Härtung geprüft.)'
+        Beispiel = 'Bindet eine Anwendung ohne LDAPS über Port 389, sind die übertragenen Anmeldedaten und Abfragen im Netz mitlesbar.'
+        Empfehlung = 'Auf den DCs ein gültiges Zertifikat für die Serverauthentifizierung bereitstellen, damit Port 636/3269 verfügbar sind; LDAP-Signing und Channel Binding zusätzlich erzwingen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - Enable LDAP over SSL (LDAPS)'; Url = 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/enable-ldap-over-ssl-3rd-certification-authority' }
+        )
+    }
+    'dc_bitlocker' = @{
+        Titel = 'BitLocker-Feature auf den DCs'; Schwere = 'Niedrig'
+        Zweck = 'Prüft je Domänencontroller, ob das BitLocker-Windows-Feature installiert/aktiviert ist (Get-WindowsOptionalFeature). Es geht um die Laufwerksverschlüsselung des DC selbst - NICHT um die AD-Bereitstellung zum Hinterlegen von BitLocker-Wiederherstellungsschlüsseln im Verzeichnis.'
+        Hintergrund = 'BitLocker verschlüsselt die Datenträger eines Servers. Auf einem Domänencontroller liegt die gesamte AD-Datenbank (NTDS.dit mit allen Passwort-Hashes) auf der Platte - wird ein DC, seine virtuelle Festplatte oder ein Backup entwendet, lassen sich diese Geheimnisse ohne Datenträgerverschlüsselung offline auslesen. Diese Prüfung zeigt nur, ob das BitLocker-Feature auf dem DC vorhanden/aktiviert ist; ob die Laufwerke tatsächlich verschlüsselt sind, ist davon zu unterscheiden. Das automatische Hinterlegen der Wiederherstellungsschlüssel in AD DS ist eine separate Funktion.'
+        Beispiel = 'Wird die virtuelle Festplatte eines DCs aus dem Backup kopiert, kann ein Angreifer ohne BitLocker die NTDS.dit einfach einhängen und alle Passwort-Hashes extrahieren.'
+        Empfehlung = 'DC-Datenträger mit BitLocker verschlüsseln (Schlüsselverwaltung z. B. über TPM, Wiederherstellungsschlüssel in AD DS sichern); Backups und virtuelle Festplatten ebenfalls schützen.'
+        Quellen = @(
+            @{ Titel = 'Microsoft Learn - BitLocker overview'; Url = 'https://learn.microsoft.com/en-us/windows/security/operating-system-security/data-protection/bitlocker/' }
+        )
+    }
     'kerberos' = @{
         Titel = 'Kerberos - Angriffsflächen'; Schwere = 'Hoch'
         Zweck = 'Bündelt die wichtigsten Kerberos-bezogenen Angriffsflächen einer AD-Umgebung: angreifbare Dienstkonten (SPN), Konten ohne Vorauthentifizierung, missbrauchbare Delegation, schwache Verschlüsselung und das Computerkonten-Kontingent.'
@@ -4023,7 +4073,6 @@ function dc_ldaps ($dc){
     $TcpClient2 = New-Object System.Net.Sockets.TcpClient($HostName,$Port2)
     if ($null -eq $TcpClient1) { $wert1 = "n.a." ; $fa1 = "Red" } else { $wert1 = "enabled" ; $fa1 = "Green" }
     if ($null -eq $TcpClient2) { $Wert2 = "n.a." ; $fa2 = "Red" } else { $Wert2 = "enabled" ; $fa2 = "Green" }
-    Bereichstitel "Voraussetzungen für LDAPS:" "s"
     Leerzeile
     2werte " Zugriff über Port  636 möglich:" $wert1 "s" $fa1
     2werte " Zugriff über Port 3269 möglich:" $wert2 "s" $fa2
@@ -4048,7 +4097,6 @@ function NTLM ($dcakt){
             default { $wert_txt = "$wert (unbekannter Wert)"                      ; $fa2 = "Red" }
         }
     }
-    Bereichstitel "NTLM Einstellungen (LmCompatibilityLevel):" "s"
     Leerzeile
     2werte "Registry-Pfad :" "$pfad" "s"
     2werte "Wertname      :" "LmCompatibilityLevel" "s"
@@ -4065,7 +4113,6 @@ function NTLM ($dcakt){
     Leerzeile
 }
 function dc_SMB1 ($DC) {
-    Bereichstitel "SMB-Protokoll Status:" "s"
     Leerzeile
     2werte " SMB 1:" " " "s"
     $state_smb1 = (Get-WindowsFeature -ComputerName "$DC" -Name FS-SMB1).Installstate
@@ -4099,7 +4146,6 @@ function Power ($sys) {
         if($ps_a[$i,0] -eq 4) { $ps_a[$i,0] = "Bypass" ; $ps_a[$i,1] = "Red" }
         if($ps_a[$i,0] -eq 5) { $ps_a[$i,0] = "Undefined" ; $ps_a[$i,1] = "Red" }
     }
-    Bereichstitel "PowerShell Policy Settings:" "s"
     Leerzeile
     2werte " MachinePolicy:" $ps_a[0,0] "s" $ps_a[0,1]
     2werte " UserPolicy   :" $ps_a[1,0] "s" $ps_a[1,1]
@@ -4113,7 +4159,6 @@ function OF_Bitlocker ($DC) {
         $ofbtp = Get-WindowsOptionalFeature -Online | Where-Object {$_.FeatureName -like "*BitLo*"}
         return $ofbtp
     }
-    Bereichstitel "BitLocker Feature:" "s"
     Leerzeile
     $laenge = 0
     foreach ($of in $ofb) {
@@ -4130,22 +4175,34 @@ function OF_Bitlocker ($DC) {
     Leerzeile
 }
 function AD_Controller {
-    foreach ($dcon in $dcons) {
-        Bereichstitel "Zum Domain Controller: $dcon"
+    # Jede DC-Detailpruefung als eigene Teilpruefung (mit Hintergrund & Empfehlung), die ueber alle DCs iteriert.
+    Unterpruefung "PowerShell-Ausführungsrichtlinie" 'dc_power' {
+        foreach ($dcon in $dcons) { Subtitel "Domain Controller: $dcon" "1" "-" ; Power $dcon }
+    }
+    Unterpruefung "SMB-Protokoll (SMB1/SMB2)" 'dc_smb' {
+        foreach ($dcon in $dcons) { Subtitel "Domain Controller: $dcon" "1" "-" ; dc_SMB1 $dcon }
+    }
+    Unterpruefung "NTLM-Stufe (LmCompatibilityLevel)" 'dc_ntlm' {
+        foreach ($dcon in $dcons) { Subtitel "Domain Controller: $dcon" "1" "-" ; NTLM $dcon }
+    }
+    Unterpruefung "LDAPS-Verfügbarkeit (Port 636/3269)" 'dc_ldaps' {
+        foreach ($dcon in $dcons) { Subtitel "Domain Controller: $dcon" "1" "-" ; dc_ldaps $dcon }
+    }
+    Unterpruefung "BitLocker-Feature auf den DCs" 'dc_bitlocker' {
+        foreach ($dcon in $dcons) { Subtitel "Domain Controller: $dcon" "1" "-" ; OF_Bitlocker $dcon }
+    }
+    if ($DomCon -eq 2) {
+        Bereichstitel "Inventar je Domain Controller (Rollen, Features, Hotfixes, Programme, Dienste)" "s"
         Leerzeile
-        Power $dcon
-        dc_SMB1 $dcon
-        NTLM $dcon
-        dc_ldaps $dcon
-        OF_Bitlocker $dcon
-        if($DomCon -eq 2) {
-        dcroles $dcon
-        dcfeature $dcon
-        dchot $dcon
-        dcprog $dcon
-        dcdienste $dcon
+        foreach ($dcon in $dcons) {
+            Subtitel "Domain Controller: $dcon" "1" "-"
+            dcroles $dcon
+            dcfeature $dcon
+            dchot $dcon
+            dcprog $dcon
+            dcdienste $dcon
         }
-      }
+    }
 }
 ####################################################################################################
 # Sicherheit Paket A: Kerberos-Angriffsflaechen (read-only LDAP-Abfragen)                          #
